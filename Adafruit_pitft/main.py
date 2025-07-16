@@ -12,7 +12,15 @@ Features:
 - Display of system status (time, network).
 - Spectrometer operations (Live view, capture, auto-integration - planned).
 
+Editing script:
+cd pysb-app
+source pysv_venv/bin/activate
+vim main.py
 sudo systemctl restart pysb-app.service
+
+Stop service:
+sudo systemctl stop pysb-app.service
+
 """
 
 import os
@@ -1837,8 +1845,10 @@ class SpectrometerScreen:
 
         self.is_active = False
         self._current_state = self.STATE_LIVE_VIEW
+        self._needs_initial_rescale = False
+        self._reflectance_refs_invalid_flag: bool = False
         self._last_integration_time_ms = 0
-
+        self._original_y_max_before_auto_integ: float | None = None
         self._frozen_intensities: np.ndarray | None = None
         self._frozen_wavelengths: np.ndarray | None = None
         self._frozen_timestamp: datetime.datetime | None = None
@@ -2023,6 +2033,18 @@ class SpectrometerScreen:
 
     def _cancel_auto_integration(self):
         logger.debug("Cancelling and resetting auto-integration variables.")
+
+        # FIXED: Restore original Y-axis scaling if we saved it
+        if (
+            hasattr(self, "_original_y_max_before_auto_integ")
+            and self._original_y_max_before_auto_integ is not None
+        ):
+            self._current_y_max_for_plot = self._original_y_max_before_auto_integ
+            logger.debug(
+                f"Auto-integ cancel: Restored original Y-axis scaling: {self._current_y_max_for_plot:.1f}"
+            )
+            self._original_y_max_before_auto_integ = None
+
         self._auto_integ_optimizing = False
         self._current_auto_integ_us = 0
         self._pending_auto_integ_ms = None
@@ -2075,37 +2097,43 @@ class SpectrometerScreen:
             return False, "Integ mismatch White"
         return True, ""
 
-    def _set_plotter_view_for_raw(self, y_label_override: str | None = None):
+    def _set_plotter_view_for_raw(
+        self, y_label_override: str | None = None, preserve_y_axis: bool = False
+    ):
         """Helper to configure renderer for a raw intensity view."""
-        self._current_y_max_for_plot = float(Y_AXIS_DEFAULT_MAX)
+        if not preserve_y_axis:
+            self._current_y_max_for_plot = float(Y_AXIS_DEFAULT_MAX)
         if self.fast_renderer:
             self.fast_renderer.set_y_label(y_label_override or "Intensity (Counts)")
             self.fast_renderer.set_y_tick_format("{:.0f}")
             self.fast_renderer.set_y_limits(0, self._current_y_max_for_plot)
 
-    def _set_plotter_view_for_reflectance(self):
+    def _set_plotter_view_for_reflectance(self, preserve_y_axis: bool = False):
         """Helper to configure renderer for a reflectance view."""
-        self._current_y_max_for_plot = float(Y_AXIS_REFLECTANCE_DEFAULT_MAX)
+        if not preserve_y_axis:
+            self._current_y_max_for_plot = float(Y_AXIS_REFLECTANCE_DEFAULT_MAX)
         if self.fast_renderer:
             self.fast_renderer.set_y_label("Reflectance")
             self.fast_renderer.set_y_tick_format("{:.1f}")
             self.fast_renderer.set_y_limits(0, self._current_y_max_for_plot)
 
-    def _set_plotter_view_for_live_mode(self):
+    def _set_plotter_view_for_live_mode(self, preserve_y_axis: bool = False):
         """Configures plotter based on the current collection mode in MenuSystem."""
         assert self.menu_system is not None
         mode = self.menu_system.get_collection_mode()
         if mode == MODE_REFLECTANCE:
-            self._set_plotter_view_for_reflectance()
+            self._set_plotter_view_for_reflectance(preserve_y_axis=preserve_y_axis)
         else:
-            self._set_plotter_view_for_raw()
+            self._set_plotter_view_for_raw(preserve_y_axis=preserve_y_axis)
 
     def activate(self):
         logger.info("Activating Spectrometer Screen.")
         self.is_active = True
         self._current_state = self.STATE_LIVE_VIEW
+        self._reflectance_refs_invalid_flag = False
         self._clear_frozen_data()
         self._cancel_auto_integration()
+        self._needs_initial_rescale = False
 
         # Setup plotter FIRST, before any clearing
         if self.fast_renderer and self.wavelengths is not None:
@@ -2227,11 +2255,18 @@ class SpectrometerScreen:
         self._auto_integ_status_msg = "Aim at white ref, then Start"
         self._current_state = self.STATE_AUTO_INTEG_SETUP
 
-        self._set_plotter_view_for_raw()
+        self._original_y_max_before_auto_integ = self._current_y_max_for_plot
+        logger.debug(
+            f"Auto-integ: Saved original Y-axis scaling: {self._original_y_max_before_auto_integ:.1f}"
+        )
+
+        self._set_plotter_view_for_raw(preserve_y_axis=True)
         if self.fast_renderer:
             self.fast_renderer.plotter.clear_data()
+
+        self._needs_initial_rescale = True
         logger.debug(
-            f"Auto-integ setup: Initial test integ set to {self._current_auto_integ_us} µs."
+            f"Auto-integ setup: Initial test integ set to {self._current_auto_integ_us} µs. Flagged for initial rescale."
         )
 
     def handle_input(self) -> str | None:
@@ -2261,7 +2296,8 @@ class SpectrometerScreen:
                     logger.warning("Freeze Sample ignored: Spectrometer not ready.")
             elif self.button_handler.check_button(BTN_UP):
                 self._current_state = self.STATE_CALIBRATE
-                self._set_plotter_view_for_raw()
+                if self.fast_renderer:
+                    self.fast_renderer.plotter.clear_data()
             elif self.button_handler.check_button(BTN_DOWN):
                 if spectrometer_can_operate:
                     self._rescale_y_axis()
@@ -2273,8 +2309,10 @@ class SpectrometerScreen:
         elif state == self.STATE_CALIBRATE:
             if self.button_handler.check_button(BTN_ENTER):
                 self._current_state = self.STATE_WHITE_CAPTURE_SETUP
+                self._needs_initial_rescale = True
             elif self.button_handler.check_button(BTN_UP):
                 self._current_state = self.STATE_DARK_CAPTURE_SETUP
+                self._needs_initial_rescale = True
             elif self.button_handler.check_button(BTN_DOWN):
                 if spectrometer_can_operate:
                     self._start_auto_integration_setup()
@@ -2282,7 +2320,7 @@ class SpectrometerScreen:
                     logger.warning("Auto-Integ Setup ignored: Spectrometer not ready.")
             elif self.button_handler.check_button(BTN_BACK):
                 self._current_state = self.STATE_LIVE_VIEW
-                self._set_plotter_view_for_live_mode()
+                self._set_plotter_view_for_live_mode(preserve_y_axis=True)
 
         elif state == self.STATE_DARK_CAPTURE_SETUP:
             if self.button_handler.check_button(BTN_ENTER):
@@ -2328,13 +2366,13 @@ class SpectrometerScreen:
             elif self.button_handler.check_button(BTN_BACK):
                 self._cancel_auto_integration()
                 self._current_state = self.STATE_CALIBRATE
-                self._set_plotter_view_for_raw()
+                self._set_plotter_view_for_raw(preserve_y_axis=True)
 
         elif state == self.STATE_AUTO_INTEG_RUNNING:
             if self.button_handler.check_button(BTN_BACK):
                 self._cancel_auto_integration()
                 self._current_state = self.STATE_CALIBRATE
-                self._set_plotter_view_for_raw()
+                self._set_plotter_view_for_raw(preserve_y_axis=True)
 
         elif state == self.STATE_AUTO_INTEG_CONFIRM:
             if self.button_handler.check_button(BTN_ENTER):
@@ -2342,7 +2380,7 @@ class SpectrometerScreen:
             elif self.button_handler.check_button(BTN_BACK):
                 self._cancel_auto_integration()
                 self._current_state = self.STATE_CALIBRATE
-                self._set_plotter_view_for_raw()
+                self._set_plotter_view_for_raw(preserve_y_axis=True)
         else:
             logger.error(f"Unhandled input state in SpectrometerScreen: {state}")
             self._current_state = self.STATE_LIVE_VIEW
@@ -2355,13 +2393,32 @@ class SpectrometerScreen:
         if not self.fast_renderer:
             return
 
-        # START TOTAL CYCLE TIMING HERE
+        state = self._current_state
+        if state == self.STATE_CALIBRATE:
+            if self.fast_renderer.plotter.display_y_data is not None:
+                self.fast_renderer.plotter.clear_data()
+            return
+
+        self._reflectance_refs_invalid_flag = False
         cycle_start_time = time.perf_counter()
         timing_info = {}
-
         spectrometer_can_operate = self._is_spectrometer_ready()
-        state = self._current_state
         current_menu_mode = self.menu_system.get_collection_mode()
+
+        if (
+            state == self.STATE_LIVE_VIEW
+            and current_menu_mode == MODE_REFLECTANCE
+            and spectrometer_can_operate
+        ):
+            valid_refs, _ = self._are_references_valid_for_reflectance()
+            if not valid_refs:
+                self._reflectance_refs_invalid_flag = True
+                self.fast_renderer.plotter.set_y_data(None)
+                timing_info["total_cycle_ms"] = (
+                    time.perf_counter() - cycle_start_time
+                ) * 1000
+                self._last_cycle_timing = timing_info
+                return
 
         is_frozen_plot_state = state == self.STATE_FROZEN_VIEW or (
             state == self.STATE_AUTO_INTEG_CONFIRM
@@ -2369,14 +2426,11 @@ class SpectrometerScreen:
         )
 
         if is_frozen_plot_state:
-            # Frozen data - no capture time, just display time
             if (
                 self._frozen_intensities is not None
                 and self._frozen_wavelengths is not None
             ):
                 display_start = time.perf_counter()
-
-                # Check if wavelengths differ from what renderer currently has
                 current_renderer_original_wl = (
                     self.fast_renderer.plotter.original_x_data
                 )
@@ -2387,21 +2441,19 @@ class SpectrometerScreen:
 
                 success = self.fast_renderer.update_spectrum(
                     self._frozen_intensities,
-                    apply_smoothing=False,  # No smoothing for frozen review
-                    force_update=True,  # Always re-render frozen data
+                    apply_smoothing=False,
+                    force_update=True,
                 )
-
                 timing_info["display_time_ms"] = (
                     time.perf_counter() - display_start
                 ) * 1000
-                timing_info["capture_time_ms"] = 0  # No capture for frozen data
-                timing_info["processing_time_ms"] = 0  # No processing for frozen data
+                timing_info["capture_time_ms"] = 0
+                timing_info["processing_time_ms"] = 0
                 timing_info["total_cycle_ms"] = (
                     time.perf_counter() - cycle_start_time
                 ) * 1000
                 timing_info["integration_time_ms"] = self._frozen_integration_ms or 0
                 timing_info["is_frozen"] = True
-
             else:
                 logger.error(
                     "Frozen data missing for plot in a frozen state. Discarding."
@@ -2429,16 +2481,12 @@ class SpectrometerScreen:
                     min(integ_time_for_capture_us, self._hw_max_integration_us),
                 )
 
-                # SPECTROMETER CAPTURE TIMING
                 capture_start = time.perf_counter()
-
                 assert self.spectrometer is not None
                 self.spectrometer.integration_time_micros(integ_us_clamped)
-
                 raw_intensities = self.spectrometer.intensities(
                     correct_dark_counts=True, correct_nonlinearity=True
                 )
-
                 capture_time = time.perf_counter() - capture_start
                 timing_info["capture_time_ms"] = capture_time * 1000
                 timing_info["integration_time_ms"] = integ_us_clamped / 1000.0
@@ -2451,43 +2499,46 @@ class SpectrometerScreen:
                     )
                     return
 
-                # DATA PROCESSING TIMING
                 processing_start = time.perf_counter()
+                processed_intensities = raw_intensities
+                is_reflectance_plot = False
 
-                processed_intensities = raw_intensities  # Default to raw
-
-                # Collection mode processing
                 if (
                     state == self.STATE_LIVE_VIEW
                     and current_menu_mode == MODE_REFLECTANCE
                 ):
-                    valid_refs, _ = self._are_references_valid_for_reflectance()
-                    if valid_refs:
-                        assert self._dark_reference_intensities is not None
-                        assert self._white_reference_intensities is not None
+                    is_reflectance_plot = True
+                    assert self._dark_reference_intensities is not None
+                    assert self._white_reference_intensities is not None
+                    numerator = raw_intensities - self._dark_reference_intensities
+                    denominator = (
+                        self._white_reference_intensities
+                        - self._dark_reference_intensities
+                    )
+                    reflectance_values = np.full_like(raw_intensities, 0.0, dtype=float)
+                    valid_denom = np.abs(denominator) > DIVISION_EPSILON
+                    reflectance_values[valid_denom] = (
+                        numerator[valid_denom] / denominator[valid_denom]
+                    )
+                    processed_intensities = np.clip(
+                        reflectance_values,
+                        0.0,
+                        Y_AXIS_REFLECTANCE_RESCALE_MAX_CEILING,
+                    )
 
-                        numerator = raw_intensities - self._dark_reference_intensities
-                        denominator = (
-                            self._white_reference_intensities
-                            - self._dark_reference_intensities
-                        )
-                        reflectance_values = np.full_like(
-                            raw_intensities, 0.0, dtype=float
-                        )
-                        valid_denom = np.abs(denominator) > DIVISION_EPSILON
-                        reflectance_values[valid_denom] = (
-                            numerator[valid_denom] / denominator[valid_denom]
-                        )
-                        processed_intensities = np.clip(
-                            reflectance_values,
-                            0.0,
-                            Y_AXIS_REFLECTANCE_RESCALE_MAX_CEILING,
-                        )
+                if (
+                    self._needs_initial_rescale
+                    and processed_intensities is not None
+                    and len(processed_intensities) > 0
+                ):
+                    self._calculate_and_set_new_y_max(
+                        processed_intensities, is_reflectance_plot
+                    )
+                    self._needs_initial_rescale = False
 
                 processing_time = time.perf_counter() - processing_start
                 timing_info["processing_time_ms"] = processing_time * 1000
 
-                # Dynamic Y-scaling for auto-integration
                 if state == self.STATE_AUTO_INTEG_RUNNING:
                     temp_data_for_scaling = processed_intensities
                     if (
@@ -2513,7 +2564,6 @@ class SpectrometerScreen:
                     )
                     self.fast_renderer.set_y_limits(0, temp_y_max_for_plot)
 
-                # Wavelengths should be set once on activate or if they change
                 if self.wavelengths is not None:
                     current_renderer_original_wl = (
                         self.fast_renderer.plotter.original_x_data
@@ -2523,37 +2573,28 @@ class SpectrometerScreen:
                     ):
                         self.fast_renderer.set_wavelengths(self.wavelengths)
 
-                # DISPLAY UPDATE TIMING
                 display_start = time.perf_counter()
-
                 success = self.fast_renderer.update_spectrum(
                     processed_intensities,
                     apply_smoothing=USE_LIVE_SMOOTHING,
                     force_update=False,
                 )
-
                 display_time = time.perf_counter() - display_start
                 timing_info["display_time_ms"] = display_time * 1000
-
-                # TOTAL CYCLE TIME
                 total_cycle_time = time.perf_counter() - cycle_start_time
                 timing_info["total_cycle_ms"] = total_cycle_time * 1000
                 timing_info["is_frozen"] = False
 
                 if not success:
                     logger.warning("FastSpectralRenderer update failed")
-
             except Exception as e_capture:
                 logger.error(
                     f"Error during live data capture for plot: {e_capture}",
                     exc_info=False,
                 )
                 return
-
-        else:  # Spectrometer not operable and not frozen state
+        else:
             return
-
-        # STORE TIMING INFO FOR DISPLAY
         self._last_cycle_timing = timing_info
 
     def _run_auto_integration_step(self):
@@ -2755,10 +2796,23 @@ class SpectrometerScreen:
         else:
             logger.warning("No pending auto-integration time to apply.")
 
-        self._cancel_auto_integration()
+        self._original_y_max_before_auto_integ = None
+        self._auto_integ_optimizing = False
+        self._current_auto_integ_us = 0
+        self._pending_auto_integ_ms = None
+        self._auto_integ_iteration_count = 0
+        self._auto_integ_status_msg = ""
+        self._last_peak_adc_value = 0.0
+        self._previous_integ_adjustment_direction = 0
+        if self._frozen_capture_type == self.FROZEN_TYPE_AUTO_INTEG_RESULT:
+            self._clear_frozen_data()
+
         self._current_state = self.STATE_LIVE_VIEW
-        self._set_plotter_view_for_live_mode()
-        logger.info("Returned to Live View after auto-integration.")
+        self._set_plotter_view_for_live_mode(preserve_y_axis=True)
+        self._needs_initial_rescale = True
+        logger.info(
+            f"Returned to Live View after auto-integration. Flagged for initial rescale."
+        )
 
     def _perform_freeze_capture(self, capture_type: str):
         assert (
@@ -2851,19 +2905,16 @@ class SpectrometerScreen:
                     self._frozen_intensities = np.clip(
                         reflectance_values, 0.0, Y_AXIS_REFLECTANCE_RESCALE_MAX_CEILING
                     )
-                    self._current_y_max_for_plot = float(Y_AXIS_REFLECTANCE_DEFAULT_MAX)
                     y_label_for_frozen = "Reflectance (Frozen)"
                     y_tick_fmt_for_frozen = "{:.1f}"
                 else:
                     assert raw_intensities_capture is not None
                     self._frozen_intensities = raw_intensities_capture.copy()
-                    self._current_y_max_for_plot = float(Y_AXIS_DEFAULT_MAX)
                     y_label_for_frozen = "Intensity (Raw Frozen)"
             else:
                 assert raw_intensities_capture is not None
                 self._frozen_intensities = raw_intensities_capture.copy()
                 self._frozen_sample_collection_mode = MODE_RAW
-                self._current_y_max_for_plot = float(Y_AXIS_DEFAULT_MAX)
                 y_label_for_frozen = f"{capture_type.capitalize()} (Frozen)"
 
             if self.fast_renderer:
@@ -2877,7 +2928,7 @@ class SpectrometerScreen:
                 else capture_type
             )
             logger.info(
-                f"{display_mode_log} spectrum frozen (Integ: {self._frozen_integration_ms} ms)."
+                f"{display_mode_log} spectrum frozen (Integ: {self._frozen_integration_ms} ms). Y-axis preserved at {self._current_y_max_for_plot:.1f}"
             )
             self._current_state = self.STATE_FROZEN_VIEW
 
@@ -2951,7 +3002,8 @@ class SpectrometerScreen:
             )
 
         self._current_state = self.STATE_LIVE_VIEW
-        self._set_plotter_view_for_live_mode()
+        self._set_plotter_view_for_live_mode(preserve_y_axis=True)
+        self._needs_initial_rescale = True
         self._clear_frozen_data()
 
     def _perform_discard_frozen_data(self):
@@ -2961,26 +3013,28 @@ class SpectrometerScreen:
 
         if original_frozen_type == self.FROZEN_TYPE_OOI:
             self._current_state = self.STATE_LIVE_VIEW
-            self._set_plotter_view_for_live_mode()
+            self._set_plotter_view_for_live_mode(preserve_y_axis=True)
         elif original_frozen_type == self.FROZEN_TYPE_DARK:
             self._current_state = self.STATE_DARK_CAPTURE_SETUP
-            self._set_plotter_view_for_raw()
+            self._set_plotter_view_for_raw(preserve_y_axis=True)
         elif original_frozen_type == self.FROZEN_TYPE_WHITE:
             self._current_state = self.STATE_WHITE_CAPTURE_SETUP
-            self._set_plotter_view_for_raw()
+            self._set_plotter_view_for_raw(preserve_y_axis=True)
         elif original_frozen_type == self.FROZEN_TYPE_AUTO_INTEG_RESULT:
             self._cancel_auto_integration()
             self._current_state = self.STATE_CALIBRATE
-            self._set_plotter_view_for_raw()
+            self._set_plotter_view_for_raw(preserve_y_axis=True)
         else:
             logger.error(
                 f"Unknown frozen_type '{original_frozen_type}' during discard."
             )
             self._current_state = self.STATE_LIVE_VIEW
-            self._set_plotter_view_for_live_mode()
+            self._set_plotter_view_for_live_mode(preserve_y_axis=True)
 
         self._clear_frozen_data()
-        logger.info(f"Returned to state: {self._current_state} after discarding.")
+        logger.info(
+            f"Returned to state: {self._current_state} after discarding. Y-axis preserved."
+        )
 
     def _save_data(
         self,
@@ -3108,7 +3162,64 @@ class SpectrometerScreen:
             logger.error(f"Error saving data to CSV {csv_path}: {e_csv}", exc_info=True)
             return False
 
+    def _calculate_and_set_new_y_max(
+        self, intensities: np.ndarray, is_reflectance: bool
+    ):
+        """Calculates a new Y-axis max based on provided data and applies it."""
+        assert (
+            self.fast_renderer is not None
+        ), "Fast renderer must be available for Y-max calc"
+        if intensities is None or len(intensities) == 0:
+            logger.warning("Cannot calculate Y-max from empty or None intensities.")
+            return
+
+        data_to_find_max_from = intensities
+        if (
+            USE_LIVE_SMOOTHING
+            and LIVE_SMOOTHING_WINDOW_SIZE > 1
+            and intensities.size >= LIVE_SMOOTHING_WINDOW_SIZE
+        ):
+            data_to_find_max_from = apply_fast_smoothing(
+                intensities, LIVE_SMOOTHING_WINDOW_SIZE
+            )
+
+        max_val_for_scaling = (
+            np.max(data_to_find_max_from) if len(data_to_find_max_from) > 0 else 0.0
+        )
+
+        new_y_max_val = 0.0
+        if is_reflectance:
+            new_y_max_val = max(
+                float(Y_AXIS_REFLECTANCE_RESCALE_MIN_CEILING),
+                float(max_val_for_scaling * Y_AXIS_RESCALE_FACTOR),
+            )
+            new_y_max_val = min(
+                new_y_max_val, float(Y_AXIS_REFLECTANCE_RESCALE_MAX_CEILING)
+            )
+        else:
+            new_y_max_val = max(
+                float(Y_AXIS_MIN_CEILING),
+                float(max_val_for_scaling * Y_AXIS_RESCALE_FACTOR),
+            )
+            new_y_max_val = min(
+                new_y_max_val,
+                float(self._hw_max_intensity_adc * Y_AXIS_RESCALE_FACTOR),
+            )
+
+        self._current_y_max_for_plot = new_y_max_val
+        self.fast_renderer.set_y_limits(0, self._current_y_max_for_plot)
+        if is_reflectance:
+            self.fast_renderer.set_y_tick_format(
+                "{:.2f}" if new_y_max_val < 2.0 and new_y_max_val > 0 else "{:.1f}"
+            )
+        else:
+            self.fast_renderer.set_y_tick_format("{:.0f}")
+        logger.info(
+            f"Y-axis max automatically rescaled to: {self._current_y_max_for_plot:.2f}"
+        )
+
     def _rescale_y_axis(self):
+        """Performs a manual Y-axis rescale by capturing a fresh spectrum."""
         assert (
             self.menu_system and np and self.spectrometer
         ), "Dependencies missing for _rescale_y_axis"
@@ -3118,7 +3229,7 @@ class SpectrometerScreen:
                 self.fast_renderer.plotter.clear_data()
             return
 
-        logger.info("Attempting to rescale Y-axis...")
+        logger.info("Attempting to manually rescale Y-axis...")
         try:
             current_menu_integ_ms = self.menu_system.get_integration_time_ms()
             current_menu_mode = self.menu_system.get_collection_mode()
@@ -3184,61 +3295,9 @@ class SpectrometerScreen:
                     self.fast_renderer.plotter.clear_data()
                 return
 
-            data_to_find_max_from = data_source_for_scaling
-            if (
-                USE_LIVE_SMOOTHING
-                and LIVE_SMOOTHING_WINDOW_SIZE > 1
-                and data_source_for_scaling.size >= LIVE_SMOOTHING_WINDOW_SIZE
-            ):
-                win_size = LIVE_SMOOTHING_WINDOW_SIZE + (
-                    1 if LIVE_SMOOTHING_WINDOW_SIZE % 2 == 0 else 0
-                )
-                if win_size <= len(data_source_for_scaling) and win_size >= 3:
-                    weights = np.ones(win_size) / float(win_size)
-                    try:
-                        data_to_find_max_from = np.convolve(
-                            data_source_for_scaling, weights, mode="same"
-                        )
-                    except Exception as e_smooth:
-                        logger.warning(
-                            f"Error smoothing for rescale max finding: {e_smooth}"
-                        )
-
-            max_val_for_scaling = (
-                np.max(data_to_find_max_from) if len(data_to_find_max_from) > 0 else 0.0
+            self._calculate_and_set_new_y_max(
+                data_source_for_scaling, is_reflectance_plot_for_rescale
             )
-
-            new_y_max_val = 0.0
-            if is_reflectance_plot_for_rescale:
-                new_y_max_val = max(
-                    float(Y_AXIS_REFLECTANCE_RESCALE_MIN_CEILING),
-                    float(max_val_for_scaling * Y_AXIS_RESCALE_FACTOR),
-                )
-                new_y_max_val = min(
-                    new_y_max_val, float(Y_AXIS_REFLECTANCE_RESCALE_MAX_CEILING)
-                )
-            else:
-                new_y_max_val = max(
-                    float(Y_AXIS_MIN_CEILING),
-                    float(max_val_for_scaling * Y_AXIS_RESCALE_FACTOR),
-                )
-                new_y_max_val = min(
-                    new_y_max_val,
-                    float(self._hw_max_intensity_adc * Y_AXIS_RESCALE_FACTOR),
-                )
-
-            self._current_y_max_for_plot = new_y_max_val
-            if self.fast_renderer:
-                self.fast_renderer.set_y_limits(0, self._current_y_max_for_plot)
-                if is_reflectance_plot_for_rescale:
-                    self.fast_renderer.set_y_tick_format(
-                        "{:.2f}"
-                        if new_y_max_val < 2.0 and new_y_max_val > 0
-                        else "{:.1f}"
-                    )
-                else:
-                    self.fast_renderer.set_y_tick_format("{:.0f}")
-            logger.info(f"Y-axis max rescaled to: {self._current_y_max_for_plot:.2f}")
 
         except AssertionError as ae:
             logger.error(f"AssertionError during Y-axis rescale: {ae}", exc_info=True)
@@ -3412,9 +3471,7 @@ class SpectrometerScreen:
             return
 
         self.screen.fill(BLACK)
-
         self._update_plot_data_for_state()
-
         spectrometer_can_operate = self._is_spectrometer_ready()
         is_frozen_data_display_state = (
             self._current_state == self.STATE_FROZEN_VIEW
@@ -3426,34 +3483,45 @@ class SpectrometerScreen:
         )
 
         if self.fast_renderer:
-            if spectrometer_can_operate or is_frozen_data_display_state:
+            if self._current_state == self.STATE_CALIBRATE:
+                plot_rect = self.fast_renderer.plotter.plot_widget_rect
+                self.screen.fill(BLACK, plot_rect)
+                if self.overlay_font:
+                    status_surf = self.overlay_font.render(
+                        "Select Calibration Method", True, YELLOW
+                    )
+                    text_rect = status_surf.get_rect(center=plot_rect.center)
+                    self.screen.blit(status_surf, text_rect)
+            elif self._reflectance_refs_invalid_flag:
+                warning_text = "Reflectance Calibration Needed"
+                plot_rect = self.fast_renderer.plotter.plot_widget_rect
+                self.screen.fill(BLACK, plot_rect)
+                if self.overlay_font:
+                    status_surf = self.overlay_font.render(warning_text, True, YELLOW)
+                    text_rect = status_surf.get_rect(center=plot_rect.center)
+                    self.screen.blit(status_surf, text_rect)
+            elif spectrometer_can_operate or is_frozen_data_display_state:
                 self.fast_renderer.draw()
-
-                if logger.isEnabledFor(logging.DEBUG):  # Optional performance logging
+                if logger.isEnabledFor(logging.DEBUG):
                     perf_info = self.fast_renderer.get_performance_info()
-                    if (
-                        perf_info and perf_info.get("estimated_fps", 0) > 0
-                    ):  # Check if perf_info is not None
+                    if perf_info and perf_info.get("estimated_fps", 0) > 0:
                         logger.debug(
                             f"Render FPS: {perf_info['estimated_fps']:.1f}, "
                             f"Points: {perf_info.get('display_data_points', 'N/A')}, "
                             f"Decimation: {perf_info.get('decimation_ratio', 'N/A'):.3f}"
                         )
             else:
-                if self.overlay_font:
+                status_txt = "Spectrometer Disabled"
+                if not USE_SPECTROMETER:
                     status_txt = "Spectrometer Disabled"
-                    if not USE_SPECTROMETER:
-                        status_txt = "Spectrometer Disabled"
-                    elif not self.spectrometer:
-                        status_txt = "Spectrometer Not Found"
-                    else:
-                        status_txt = "Spectrometer Not Ready"
+                elif not self.spectrometer:
+                    status_txt = "Spectrometer Not Found"
+                else:
+                    status_txt = "Spectrometer Not Ready"
 
-                    # Use plot area from fast_renderer's internal plotter
-                    plot_rect = self.fast_renderer.plotter.plot_widget_rect
-                    self.screen.fill(
-                        BLACK, plot_rect
-                    )  # Use BLACK or self.fast_renderer.plotter.bg_color
+                plot_rect = self.fast_renderer.plotter.plot_widget_rect
+                self.screen.fill(BLACK, plot_rect)
+                if self.overlay_font:
                     status_surf = self.overlay_font.render(status_txt, True, YELLOW)
                     text_rect = status_surf.get_rect(center=plot_rect.center)
                     self.screen.blit(status_surf, text_rect)
@@ -3501,29 +3569,23 @@ class SpectrometerScreen:
 
             self.draw()
 
-            # FIXED: Use minimal loop delay since capture already includes integration time
-            base_wait_ms = int(SPECTRO_LOOP_DELAY_S * 1000)  # ~50ms base delay
+            base_wait_ms = int(SPECTRO_LOOP_DELAY_S * 1000)
             wait_ms = base_wait_ms
 
             try:
-                # Dynamic wait based on actual cycle performance
                 timing = getattr(self, "_last_cycle_timing", {})
                 if timing and not timing.get("is_frozen", False):
                     actual_cycle_ms = timing.get("total_cycle_ms", 0)
-                    # If cycle was very fast, use base wait; otherwise minimal wait
-                    if actual_cycle_ms < 100:  # Cycle under 100ms (rare)
+                    if actual_cycle_ms < 100:
                         wait_ms = base_wait_ms
                     else:
-                        # Minimal wait since capture already took the integration time
-                        wait_ms = max(10, min(base_wait_ms, 30))  # 10-30ms range
+                        wait_ms = max(10, min(base_wait_ms, 30))
                 elif self._current_state in [
                     self.STATE_FROZEN_VIEW,
                     self.STATE_CALIBRATE,
                     self.STATE_AUTO_INTEG_CONFIRM,
                 ]:
-                    # For menu states, use base wait for responsiveness
                     wait_ms = base_wait_ms
-
             except Exception as e_wait:
                 logger.warning(f"Error calculating dynamic wait: {e_wait}")
                 wait_ms = base_wait_ms
@@ -3541,7 +3603,7 @@ class SpectrometerScreen:
         if self.fast_renderer:
             try:
                 perf_info = self.fast_renderer.get_performance_info()
-                if perf_info:  # Check if perf_info is not None
+                if perf_info:
                     logger.info(f"Final render performance: {perf_info}")
 
                 self.fast_renderer.plotter.clear_data()
@@ -3557,7 +3619,6 @@ class SpectrometerScreen:
             except Exception as e:
                 logger.error(f"Error closing spectrometer: {e}", exc_info=True)
         self.spectrometer = None
-        # self.fast_renderer = None # Already set to None above
         logger.info("SpectrometerScreen cleanup complete.")
 
 
