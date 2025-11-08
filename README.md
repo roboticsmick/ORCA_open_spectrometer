@@ -1,4 +1,4 @@
-# OPEN_SPECTROMETER
+# ORCA Open Spectrometer
 
 This library allows you to use the Ocean Optics ST-VIS range of spectrometers using a Raspberry Pi Zerro 2W and a LCD display to view spectra using the Seabreeze API. This allows for a very small low power package that can easily be integrated into a small handheld device for field work. 
 
