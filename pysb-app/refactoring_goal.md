@@ -22,6 +22,8 @@ The refactoring process is guided by the following software engineering principl
 
 The project has been reorganized from a single script into a structured directory format:
 
+#### Draft plan outline
+
 ```
 pysb-app/
 ├── main.py                 # Application entry point, orchestrator, and main UI loop.

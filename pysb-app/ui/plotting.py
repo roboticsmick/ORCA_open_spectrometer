@@ -6,6 +6,7 @@ import numpy as np
 import pygame
 import config
 
+
 ##
 # @brief Crop spectral data to a specific wavelength range.
 # @param wavelengths Array of wavelength values (nm).
@@ -23,7 +24,9 @@ def crop_wavelength_range(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Crop spectral data to a specific wavelength range."""
     assert isinstance(wavelengths, np.ndarray) and isinstance(intensities, np.ndarray)
-    assert len(wavelengths) == len(intensities), "Wavelengths and intensities must have same length"
+    assert len(wavelengths) == len(
+        intensities
+    ), "Wavelengths and intensities must have same length"
 
     # If no cropping is requested, return copies
     if min_wavelength is None and max_wavelength is None:
@@ -229,16 +232,24 @@ class OptimizedPygamePlotter:
         try:
             ## @var axis_label_font
             # @brief Font for axis labels.
-            self.axis_label_font = pygame.font.Font(config.FONTS.PLOTTER_AXIS_LABEL, config.FONT_SIZES.PLOTTER_AXIS)
+            self.axis_label_font = pygame.font.Font(
+                config.FONTS.PLOTTER_AXIS_LABEL, config.FONT_SIZES.PLOTTER_AXIS
+            )
         except:
-            self.axis_label_font = pygame.font.Font(None, config.FONT_SIZES.PLOTTER_AXIS)
+            self.axis_label_font = pygame.font.Font(
+                None, config.FONT_SIZES.PLOTTER_AXIS
+            )
 
         try:
             ## @var tick_label_font
             # @brief Font for tick labels.
-            self.tick_label_font = pygame.font.Font(config.FONTS.PLOTTER_TICK_LABEL, config.FONT_SIZES.PLOTTER_TICK)
+            self.tick_label_font = pygame.font.Font(
+                config.FONTS.PLOTTER_TICK_LABEL, config.FONT_SIZES.PLOTTER_TICK
+            )
         except:
-            self.tick_label_font = pygame.font.Font(None, config.FONT_SIZES.PLOTTER_TICK)
+            self.tick_label_font = pygame.font.Font(
+                None, config.FONT_SIZES.PLOTTER_TICK
+            )
 
         ## @var x_label_text
         # @brief X-axis label text.
@@ -301,8 +312,13 @@ class OptimizedPygamePlotter:
         self.graph_area = pygame.Rect(
             self.plot_widget_rect.left + self.padding_left,
             self.plot_widget_rect.top + self.padding_top,
-            max(20, self.plot_widget_rect.width - self.padding_left - self.padding_right),
-            max(20, self.plot_widget_rect.height - self.padding_top - self.padding_bottom),
+            max(
+                20, self.plot_widget_rect.width - self.padding_left - self.padding_right
+            ),
+            max(
+                20,
+                self.plot_widget_rect.height - self.padding_top - self.padding_bottom,
+            ),
         )
 
         ## @var original_x_data
@@ -374,7 +390,9 @@ class OptimizedPygamePlotter:
 
         # Decimate X data for display
         if len(x_data) > self.target_display_points:
-            indices = np.linspace(0, len(x_data) - 1, self.target_display_points, dtype=int)
+            indices = np.linspace(
+                0, len(x_data) - 1, self.target_display_points, dtype=int
+            )
             self.display_x_data = x_data[indices].copy()
         else:
             self.display_x_data = x_data.copy()
@@ -435,11 +453,15 @@ class OptimizedPygamePlotter:
             self.display_y_data = y_data.copy().astype(np.float32)
         else:
             # Fallback: resample if lengths don't match
-            print(f"WARNING: Y_data length ({len(y_data)}) mismatch with display_x_data. Attempting to resample.")
+            print(
+                f"WARNING: Y_data length ({len(y_data)}) mismatch with display_x_data. Attempting to resample."
+            )
             if self.display_x_data is not None and len(self.display_x_data) > 1:
                 current_indices = np.linspace(0, 1, len(y_data))
                 target_indices = np.linspace(0, 1, len(self.display_x_data))
-                self.display_y_data = np.interp(target_indices, current_indices, y_data).astype(np.float32)
+                self.display_y_data = np.interp(
+                    target_indices, current_indices, y_data
+                ).astype(np.float32)
             else:
                 self.display_y_data = None
                 self.screen_y_coords = None
@@ -468,7 +490,9 @@ class OptimizedPygamePlotter:
             self.screen_y_coords = None
             return
 
-        clamped_y = np.clip(valid_y_data, self.y_min_val_display, self.y_max_val_display)
+        clamped_y = np.clip(
+            valid_y_data, self.y_min_val_display, self.y_max_val_display
+        )
         normalized_y = (clamped_y - self.y_min_val_display) / y_range
         raw_coords = self.graph_area.bottom - normalized_y * self.graph_area.height
 
@@ -542,33 +566,83 @@ class OptimizedPygamePlotter:
         graph_bottom = self.graph_area.bottom - self.plot_widget_rect.top
 
         # Draw axes
-        pygame.draw.line(self.static_surface, self.axis_color, (graph_left, graph_bottom), (graph_right, graph_bottom), 1)
-        pygame.draw.line(self.static_surface, self.axis_color, (graph_left, graph_top), (graph_left, graph_bottom), 1)
+        pygame.draw.line(
+            self.static_surface,
+            self.axis_color,
+            (graph_left, graph_bottom),
+            (graph_right, graph_bottom),
+            1,
+        )
+        pygame.draw.line(
+            self.static_surface,
+            self.axis_color,
+            (graph_left, graph_top),
+            (graph_left, graph_bottom),
+            1,
+        )
 
         # Draw X-axis ticks and labels
-        if self.num_x_ticks > 0 and self.x_max_val > self.x_min_val and self.display_x_data is not None:
-            x_tick_values = np.linspace(self.x_min_val, self.x_max_val, self.num_x_ticks + 1)
+        if (
+            self.num_x_ticks > 0
+            and self.x_max_val > self.x_min_val
+            and self.display_x_data is not None
+        ):
+            x_tick_values = np.linspace(
+                self.x_min_val, self.x_max_val, self.num_x_ticks + 1
+            )
             for val in x_tick_values:
-                x_pos = graph_left + (val - self.x_min_val) / (self.x_max_val - self.x_min_val) * (graph_right - graph_left)
-                pygame.draw.line(self.static_surface, self.axis_color, (x_pos, graph_bottom), (x_pos, graph_bottom + 5), 1)
+                x_pos = graph_left + (val - self.x_min_val) / (
+                    self.x_max_val - self.x_min_val
+                ) * (graph_right - graph_left)
+                pygame.draw.line(
+                    self.static_surface,
+                    self.axis_color,
+                    (x_pos, graph_bottom),
+                    (x_pos, graph_bottom + 5),
+                    1,
+                )
                 try:
-                    label_surf = self.tick_label_font.render(f"{val:.0f}", True, self.text_color)
-                    label_rect = label_surf.get_rect(centerx=x_pos, top=graph_bottom + 7)
+                    label_surf = self.tick_label_font.render(
+                        f"{val:.0f}", True, self.text_color
+                    )
+                    label_rect = label_surf.get_rect(
+                        centerx=x_pos, top=graph_bottom + 7
+                    )
                     self.static_surface.blit(label_surf, label_rect)
                 except pygame.error:
                     pass
 
         # Draw Y-axis ticks, labels, and grid
         if self.num_y_ticks > 0 and self.y_max_val_display > self.y_min_val_display:
-            y_tick_values = np.linspace(self.y_min_val_display, self.y_max_val_display, self.num_y_ticks + 1)
+            y_tick_values = np.linspace(
+                self.y_min_val_display, self.y_max_val_display, self.num_y_ticks + 1
+            )
             for val in y_tick_values:
-                y_pos = graph_bottom - (val - self.y_min_val_display) / (self.y_max_val_display - self.y_min_val_display) * (graph_bottom - graph_top)
-                pygame.draw.line(self.static_surface, self.axis_color, (graph_left - 5, y_pos), (graph_left, y_pos), 1)
-                pygame.draw.line(self.static_surface, self.grid_color, (graph_left + 1, y_pos), (graph_right, y_pos), 1)
+                y_pos = graph_bottom - (val - self.y_min_val_display) / (
+                    self.y_max_val_display - self.y_min_val_display
+                ) * (graph_bottom - graph_top)
+                pygame.draw.line(
+                    self.static_surface,
+                    self.axis_color,
+                    (graph_left - 5, y_pos),
+                    (graph_left, y_pos),
+                    1,
+                )
+                pygame.draw.line(
+                    self.static_surface,
+                    self.grid_color,
+                    (graph_left + 1, y_pos),
+                    (graph_right, y_pos),
+                    1,
+                )
                 try:
                     label_str = self.y_tick_format_str.format(val)
-                    label_surf = self.tick_label_font.render(label_str, True, self.text_color)
-                    label_rect = label_surf.get_rect(right=graph_left - 7, centery=y_pos)
+                    label_surf = self.tick_label_font.render(
+                        label_str, True, self.text_color
+                    )
+                    label_rect = label_surf.get_rect(
+                        right=graph_left - 7, centery=y_pos
+                    )
                     self.static_surface.blit(label_surf, label_rect)
                 except (pygame.error, ValueError):
                     pass
@@ -576,8 +650,12 @@ class OptimizedPygamePlotter:
         # Draw X-axis label
         if self.x_label_text:
             try:
-                x_label_surf = self.axis_label_font.render(self.x_label_text, True, self.text_color)
-                x_label_rect = x_label_surf.get_rect(centerx=(graph_left + graph_right) // 2, top=graph_bottom + 25)
+                x_label_surf = self.axis_label_font.render(
+                    self.x_label_text, True, self.text_color
+                )
+                x_label_rect = x_label_surf.get_rect(
+                    centerx=(graph_left + graph_right) // 2, top=graph_bottom + 25
+                )
                 self.static_surface.blit(x_label_surf, x_label_rect)
             except pygame.error:
                 pass
@@ -585,9 +663,13 @@ class OptimizedPygamePlotter:
         # Draw Y-axis label (rotated)
         if self.y_label_text:
             try:
-                y_label_surf = self.axis_label_font.render(self.y_label_text, True, self.text_color)
+                y_label_surf = self.axis_label_font.render(
+                    self.y_label_text, True, self.text_color
+                )
                 y_label_rotated = pygame.transform.rotate(y_label_surf, 90)
-                y_label_rect = y_label_rotated.get_rect(centerx=15, centery=(graph_top + graph_bottom) // 2)
+                y_label_rect = y_label_rotated.get_rect(
+                    centerx=15, centery=(graph_top + graph_bottom) // 2
+                )
                 self.static_surface.blit(y_label_rotated, y_label_rect)
             except pygame.error:
                 pass
@@ -648,7 +730,9 @@ class OptimizedPygamePlotter:
                 self.plot_surface.set_clip(clip_rect)
 
                 # Draw the lines
-                pygame.draw.lines(self.plot_surface, self.plot_color, False, point_list, 1)
+                pygame.draw.lines(
+                    self.plot_surface, self.plot_color, False, point_list, 1
+                )
 
                 self.plot_surface.set_clip(None)  # Reset clipping
 
@@ -673,13 +757,19 @@ class OptimizedPygamePlotter:
     def get_performance_stats(self) -> dict:
         """Get performance statistics."""
         stats = {
-            "original_data_points": len(self.original_x_data) if self.original_x_data is not None else 0,
-            "display_data_points": len(self.display_x_data) if self.display_x_data is not None else 0,
+            "original_data_points": (
+                len(self.original_x_data) if self.original_x_data is not None else 0
+            ),
+            "display_data_points": (
+                len(self.display_x_data) if self.display_x_data is not None else 0
+            ),
             "decimation_ratio": 0.0,
             "memory_usage_mb": 0.0,
         }
         if stats["original_data_points"] > 0 and stats["display_data_points"] > 0:
-            stats["decimation_ratio"] = stats["display_data_points"] / stats["original_data_points"]
+            stats["decimation_ratio"] = (
+                stats["display_data_points"] / stats["original_data_points"]
+            )
 
         arrays_to_check = [
             self.original_x_data,
@@ -688,7 +778,11 @@ class OptimizedPygamePlotter:
             self.screen_x_coords,
             self.screen_y_coords,
         ]
-        total_bytes = sum(arr.nbytes for arr in arrays_to_check if arr is not None and hasattr(arr, "nbytes"))
+        total_bytes = sum(
+            arr.nbytes
+            for arr in arrays_to_check
+            if arr is not None and hasattr(arr, "nbytes")
+        )
         stats["memory_usage_mb"] = total_bytes / (1024 * 1024)
         return stats
 
@@ -798,7 +892,10 @@ class FastSpectralRenderer:
 
         if not force_update:
             data_hash = hashlib.md5(intensities.tobytes()).hexdigest()
-            if data_hash == self._last_raw_data_hash and self._cached_display_data is not None:
+            if (
+                data_hash == self._last_raw_data_hash
+                and self._cached_display_data is not None
+            ):
                 self.plotter.set_y_data(self._cached_display_data)
                 return True
             self._last_raw_data_hash = data_hash
@@ -806,8 +903,18 @@ class FastSpectralRenderer:
         try:
             original_wavelengths = self.plotter.original_x_data
             if original_wavelengths is None:
-                print("WARNING: original_x_data not set in plotter. Assuming default.")
-                original_wavelengths = np.linspace(400, 800, len(intensities))
+                print(
+                    "WARNING: original_x_data not set in plotter. Cannot update spectrum."
+                )
+                return False
+
+            # Verify array lengths match
+            if len(original_wavelengths) != len(intensities):
+                print(
+                    f"ERROR: Wavelength/intensity length mismatch! "
+                    f"wavelengths={len(original_wavelengths)}, intensities={len(intensities)}"
+                )
+                return False
 
             # Use the global prepare_display_data function
             display_wavelengths, display_intensities = prepare_display_data(
@@ -820,10 +927,19 @@ class FastSpectralRenderer:
 
             self._cached_display_data = display_intensities.copy()
 
-            # Update plotter with cropped wavelengths if they changed
+            # Update plotter display wavelengths if they changed (WITHOUT overwriting original_x_data)
             current_plotter_wl = self.plotter.display_x_data
-            if current_plotter_wl is None or not np.array_equal(current_plotter_wl, display_wavelengths):
-                self.plotter.set_x_data_static(display_wavelengths)
+            if current_plotter_wl is None or not np.array_equal(
+                current_plotter_wl, display_wavelengths
+            ):
+                # Directly update display_x_data without touching original_x_data
+                self.plotter.display_x_data = display_wavelengths.copy()
+                self.plotter.x_min_val = float(np.min(display_wavelengths))
+                self.plotter.x_max_val = float(np.max(display_wavelengths))
+                if self.plotter.x_max_val == self.plotter.x_min_val:
+                    self.plotter.x_max_val = self.plotter.x_min_val + 1.0
+                self.plotter._precompute_screen_x_coordinates()
+                self.plotter.needs_static_redraw = True
 
             # Set the cropped intensity data
             self.plotter.set_y_data(display_intensities)
@@ -897,11 +1013,15 @@ class FastSpectralRenderer:
     def configure_smoothing(self, enabled: bool = True, window_size: int = 5):
         """Configure smoothing parameters."""
         assert isinstance(enabled, bool), "Enabled must be boolean"
-        assert isinstance(window_size, int) and window_size > 0, "Window size must be positive integer"
+        assert (
+            isinstance(window_size, int) and window_size > 0
+        ), "Window size must be positive integer"
 
         self.smoothing_enabled = enabled
         self.smoothing_window = window_size
 
         self._last_raw_data_hash = None  # Invalidate cache
         self._cached_display_data = None
-        print(f"INFO: FastSpectralRenderer smoothing configured: enabled={enabled}, window={window_size}")
+        print(
+            f"INFO: FastSpectralRenderer smoothing configured: enabled={enabled}, window={window_size}"
+        )

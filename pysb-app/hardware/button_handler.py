@@ -11,9 +11,11 @@ import config
 
 try:
     import RPi.GPIO as GPIO
+
     GPIO_AVAILABLE = True
 except (RuntimeError, ImportError):
     GPIO_AVAILABLE = False
+
 
 ##
 # @class ButtonHandler
@@ -36,7 +38,13 @@ class ButtonHandler:
         ## @var _button_states
         # @brief Dictionary mapping button names to their current state (True = pressed).
         self._button_states = {
-            btn: False for btn in [config.BTN_UP, config.BTN_DOWN, config.BTN_ENTER, config.BTN_BACK]
+            btn: False
+            for btn in [
+                config.BTN_UP,
+                config.BTN_DOWN,
+                config.BTN_ENTER,
+                config.BTN_BACK,
+            ]
         }
 
         ## @var _state_lock
@@ -67,7 +75,9 @@ class ButtonHandler:
         if config.HARDWARE["USE_GPIO_BUTTONS"] and GPIO_AVAILABLE:
             self._setup_gpio_inputs()
         else:
-            print("INFO: GPIO buttons are disabled or RPi.GPIO is not available. Using keyboard only.")
+            print(
+                "INFO: GPIO buttons are disabled or RPi.GPIO is not available. Using keyboard only."
+            )
 
     ##
     # @brief Sets up GPIO pins for button inputs and adds event detection.
@@ -79,11 +89,15 @@ class ButtonHandler:
         """Sets up the GPIO pins for button inputs and adds event detection."""
         GPIO.setwarnings(False)  # Suppress warnings about GPIO already in use
 
-        # Clean up any existing GPIO configuration from previous runs
+        # Thorough cleanup of any existing GPIO configuration from previous runs
         try:
+            # Try to cleanup all GPIO
             GPIO.cleanup()
         except:
             pass  # Ignore if GPIO wasn't initialized
+
+        # Small delay to let kernel release pins
+        time.sleep(0.1)
 
         GPIO.setmode(GPIO.BCM)
 
@@ -95,12 +109,14 @@ class ButtonHandler:
 
         # Setup Hall Effect sensors if enabled
         if config.HARDWARE["USE_HALL_EFFECT_BUTTONS"]:
-            pin_to_button.update({
-                config.HALL_EFFECT_PINS["UP"]: config.BTN_UP,
-                config.HALL_EFFECT_PINS["DOWN"]: config.BTN_DOWN,
-                config.HALL_EFFECT_PINS["ENTER"]: config.BTN_ENTER,
-                config.HALL_EFFECT_PINS["BACK"]: config.BTN_BACK,
-            })
+            pin_to_button.update(
+                {
+                    config.HALL_EFFECT_PINS["UP"]: config.BTN_UP,
+                    config.HALL_EFFECT_PINS["DOWN"]: config.BTN_DOWN,
+                    config.HALL_EFFECT_PINS["ENTER"]: config.BTN_ENTER,
+                    config.HALL_EFFECT_PINS["BACK"]: config.BTN_BACK,
+                }
+            )
             pins_used.update(pin_to_button.keys())
 
         # Setup Adafruit PiTFT tactile buttons if enabled
@@ -108,9 +124,9 @@ class ButtonHandler:
             # Adafruit PiTFT button mapping (from original code)
             pitft_mapping = {
                 config.BUTTON_PINS["A"]: config.BTN_ENTER,  # A -> Enter
-                config.BUTTON_PINS["B"]: config.BTN_BACK,   # B -> Back
-                config.BUTTON_PINS["X"]: config.BTN_UP,     # X -> Up
-                config.BUTTON_PINS["Y"]: config.BTN_DOWN,   # Y -> Down
+                config.BUTTON_PINS["B"]: config.BTN_BACK,  # B -> Back
+                config.BUTTON_PINS["X"]: config.BTN_UP,  # X -> Up
+                config.BUTTON_PINS["Y"]: config.BTN_DOWN,  # Y -> Down
             }
             # Only add pins that aren't already used (avoid duplicates)
             for pin, button_name in pitft_mapping.items():
@@ -120,36 +136,65 @@ class ButtonHandler:
 
         # Setup Display HAT buttons if no other buttons configured
         if not pin_to_button and config.HARDWARE["USE_DISPLAY_HAT"]:
-            pin_to_button.update({
-                config.BUTTON_PINS["A"]: config.BTN_UP,
-                config.BUTTON_PINS["B"]: config.BTN_DOWN,
-                config.BUTTON_PINS["X"]: config.BTN_ENTER,
-                config.BUTTON_PINS["Y"]: config.BTN_BACK,
-            })
+            pin_to_button.update(
+                {
+                    config.BUTTON_PINS["A"]: config.BTN_UP,
+                    config.BUTTON_PINS["B"]: config.BTN_DOWN,
+                    config.BUTTON_PINS["X"]: config.BTN_ENTER,
+                    config.BUTTON_PINS["Y"]: config.BTN_BACK,
+                }
+            )
 
         # Store the mapping for callback lookup
         self._pin_to_button = pin_to_button.copy()
 
         for pin, button_name in pin_to_button.items():
             assert isinstance(pin, int), f"Pin {pin} must be an integer"
-            assert button_name in self._button_states, f"Unknown button name: {button_name}"
+            assert (
+                button_name in self._button_states
+            ), f"Unknown button name: {button_name}"
 
             GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
             # Remove existing edge detection if present (from previous run)
             try:
                 GPIO.remove_event_detect(pin)
+                time.sleep(0.01)  # Small delay after removal
             except:
                 pass  # Ignore if no edge detection was set
 
-            # Add edge detection with hardware debouncing
+            # Add edge detection with hardware debouncing (with retry)
             # Use direct callback instead of lambda to avoid closure issues
-            GPIO.add_event_detect(
-                pin,
-                GPIO.FALLING,
-                callback=self._gpio_callback,
-                bouncetime=bouncetime_ms
-            )
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    GPIO.add_event_detect(
+                        pin,
+                        GPIO.FALLING,
+                        callback=self._gpio_callback,
+                        bouncetime=bouncetime_ms,
+                    )
+                    break  # Success, exit retry loop
+                except RuntimeError as e:
+                    if attempt < max_retries - 1:
+                        # Try harder to clean up this specific pin
+                        print(
+                            f"WARNING: Failed to add edge detection on pin {pin}, attempt {attempt + 1}/{max_retries}"
+                        )
+                        try:
+                            GPIO.cleanup(pin)
+                            time.sleep(0.05)
+                            # Re-setup the pin as input after cleanup
+                            GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+                            time.sleep(0.01)
+                        except:
+                            pass
+                    else:
+                        # Final attempt failed
+                        print(
+                            f"ERROR: Could not add edge detection on pin {pin} after {max_retries} attempts"
+                        )
+                        raise
         print(f"INFO: GPIO buttons initialized for pins: {list(pin_to_button.keys())}")
 
     ##
@@ -170,7 +215,9 @@ class ButtonHandler:
 
         # This is called in a separate thread by RPi.GPIO
         current_time = time.monotonic()
-        if (current_time - self._last_press_time[button_name]) > config.DEBOUNCE_DELAY_S:
+        if (
+            current_time - self._last_press_time[button_name]
+        ) > config.DEBOUNCE_DELAY_S:
             with self._state_lock:
                 self._button_states[button_name] = True
             self._last_press_time[button_name] = current_time
@@ -189,18 +236,20 @@ class ButtonHandler:
             if event.type == pygame.QUIT:
                 # This is a special case to signal shutdown
                 with self._state_lock:
-                    self._button_states["shutdown"] = True # Special flag
+                    self._button_states["shutdown"] = True  # Special flag
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                     with self._state_lock:
-                        self._button_states["shutdown"] = True # Special flag
+                    with self._state_lock:
+                        self._button_states["shutdown"] = True  # Special flag
 
                 elif event.key in self._key_map:
                     button_name = self._key_map[event.key]
                     current_time = time.monotonic()
                     # Apply debounce for keyboard as well
-                    if (current_time - self._last_press_time[button_name]) > config.DEBOUNCE_DELAY_S:
+                    if (
+                        current_time - self._last_press_time[button_name]
+                    ) > config.DEBOUNCE_DELAY_S:
                         with self._state_lock:
                             self._button_states[button_name] = True
                         self._last_press_time[button_name] = current_time
@@ -215,7 +264,7 @@ class ButtonHandler:
         """Checks if a button was pressed and consumes the event. Returns True if pressed."""
         with self._state_lock:
             if self._button_states.get(button_name, False):
-                self._button_states[button_name] = False # Consume the press
+                self._button_states[button_name] = False  # Consume the press
                 return True
             return False
 
@@ -226,5 +275,18 @@ class ButtonHandler:
     def cleanup(self):
         """Cleans up GPIO resources."""
         if config.HARDWARE["USE_GPIO_BUTTONS"] and GPIO_AVAILABLE:
-            GPIO.cleanup()
-            print("INFO: GPIO cleaned up.")
+            # First remove all edge detection
+            for pin in self._pin_to_button.keys():
+                try:
+                    GPIO.remove_event_detect(pin)
+                except:
+                    pass  # Ignore errors during cleanup
+
+            # Then cleanup all GPIO
+            try:
+                GPIO.cleanup()
+                print("INFO: GPIO cleaned up.")
+            except:
+                print(
+                    "WARNING: GPIO cleanup encountered errors (this is usually safe to ignore)"
+                )

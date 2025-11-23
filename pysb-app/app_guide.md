@@ -2,8 +2,8 @@
 
 This document provides a technical overview of the PySB-App, a Python-based spectrometer application designed for a Raspberry Pi with a touchscreen interface.
 
-**Last Updated:** 2025-11-09
-**Refactoring Status:** Phase 1 Complete (Foundation, Core Architecture, Menu System with DateTime Editing)
+**Last Updated:** 2025-11-23
+**Refactoring Status:** Phase 2 Complete (Live Spectrometer with Real-time Plotting) ✅
 
 ---
 
@@ -296,7 +296,7 @@ These boolean flags are used to signal to the spectrometer screen that new calib
 
 ### 5.1 ButtonHandler (`hardware/button_handler.py`)
 
-**Status:** ✅ Functional with full Doxygen documentation
+**Status:** ✅ Functional and tested with full Doxygen documentation and robust error recovery
 
 Manages all button inputs from both GPIO pins and Pygame keyboard events, providing a unified interface.
 
@@ -309,6 +309,8 @@ Manages all button inputs from both GPIO pins and Pygame keyboard events, provid
 * Direct GPIO callback (not lambda) to avoid closure issues
 * Pin-to-button mapping dictionary for reliable interrupt handling
 * Keyboard mappings: Arrow keys, WASD, Enter, Space, Backspace, B, Escape
+* **Robust GPIO error recovery with automatic retry logic (3 attempts)**
+* **Automatic pin cleanup and re-initialization on edge detection failures**
 
 **API:**
 
@@ -321,6 +323,10 @@ Manages all button inputs from both GPIO pins and Pygame keyboard events, provid
 * Uses direct callback method reference instead of lambda to avoid variable capture issues
 * Stores pin-to-button mapping in instance variable for callback lookup
 * Supports multiple GPIO button sources without pin conflicts
+* Implements 3-attempt retry logic for edge detection failures with progressive cleanup
+* Re-configures GPIO pins as INPUT after cleanup to prevent "channel not setup" errors
+* Adds delays (100ms initial, 50ms between retries) to allow kernel to release pins
+* Explicitly removes edge detection on all pins during cleanup for clean shutdown
 
 ### 5.2 LeakSensor (`hardware/leak_sensor.py`)
 
@@ -362,7 +368,7 @@ Fetches WiFi SSID and IP address in a background thread to prevent UI blocking.
 
 ### 5.4 SpectrometerController (`hardware/spectrometer_controller.py`)
 
-**Status:** ✅ Functional with full Doxygen documentation
+**Status:** ✅ Functional and tested with full Doxygen documentation
 
 Background thread controller for USB spectrometer with session-based scan validity tracking.
 
@@ -496,9 +502,9 @@ Main menu for navigating settings and starting capture.
 
 ### 6.6 plotting.py (`ui/plotting.py`)
 
-**Status:** ✅ Functional with full Doxygen documentation
+**Status:** ✅ Functional and tested with full Doxygen documentation
 
-High-performance plotting library for spectral data visualization.
+High-performance plotting library for spectral data visualization with optimized data flow.
 
 **Classes:**
 
@@ -514,6 +520,7 @@ High-performance plotting library for spectral data visualization.
   * FPS and frame time monitoring
   * Configurable smoothing
   * Automatic wavelength update detection
+  * **Preserves original wavelength data separately from display data to prevent overwrite bugs**
 
 **Helper Functions:**
 
@@ -531,9 +538,9 @@ High-performance plotting library for spectral data visualization.
 
 ### 6.7 spectrometer_screen.py (`ui/spectrometer_screen.py`)
 
-**Status:** ✅ Functional with queue-based controller integration
+**Status:** ✅ Functional and tested with queue-based controller integration
 
-Live spectrometer view screen for displaying spectral plots in real-time.
+Live spectrometer view screen for displaying spectral plots in real-time at ~30 FPS.
 
 **Key Features:**
 
@@ -548,6 +555,8 @@ Live spectrometer view screen for displaying spectral plots in real-time.
 * **Freeze/capture**: Freeze current plot and save to CSV
 * **Reference capture**: Dark and white reference capture workflows
 * **Status display**: Shows integration time, mode, scan averaging, reference status
+* **Optimized initialization**: Settings synced before session start to prevent rapid session cycling
+* **Renderer reset on entry**: Clears previous wavelength data for fresh initialization
 
 **Screen States:**
 
@@ -556,12 +565,28 @@ Live spectrometer view screen for displaying spectral plots in real-time.
 * `STATE_CAPTURE_DARK_REF`: Capturing dark reference (cover sensor)
 * `STATE_CAPTURE_WHITE_REF`: Capturing white reference (point at white target)
 
-**Button Controls:**
+**Button Controls (Physical Button → Logical Name):**
 
-* **ENTER**: Freeze/unfreeze plot, or confirm capture
-* **BACK**: Return to menu or cancel capture
-* **UP**: Start dark reference capture
-* **DOWN**: Start white reference capture
+* **A (ENTER)**: Freeze/unfreeze plot, save frozen data, or confirm capture
+* **B (BACK)**: Return to menu, discard frozen data, or cancel capture
+* **X (UP)**: Start dark reference capture
+* **Y (DOWN)**: Rescale Y-axis based on current data (in live view and white setup)
+
+**On-Screen Display:**
+
+* **Top Left**: Collection mode, integration time, scan averaging (e.g., "RAW | 1000ms | Avg:10")
+* **Top Right**: Current screen state mode (e.g., "Mode: LIVE", "Mode: REVIEW", "Mode: DARK SETUP")
+* **Bottom Center**: Context-sensitive hint text (e.g., "A:Freeze | X:Dark | Y:Rescale | B:Menu")
+
+**Y-Axis Scaling:**
+
+* **Initial defaults**: Set when entering screen based on collection mode
+  * RAW mode: 1000.0 (max ADC counts)
+  * REFLECTANCE mode: 10.0 (reflectance ratio)
+* **Manual rescale**: Press Y button to rescale based on current maximum intensity
+  * Applies 1.2x scaling factor with mode-specific min/max limits
+  * RAW limits: 100.0 to (HW_MAX_ADC_COUNT * 1.2)
+  * REFLECTANCE limits: 0.2 to 200.0
 
 **Public Methods:**
 
@@ -643,6 +668,7 @@ spectro_screen.exit()
    * FastSpectralRenderer with MD5 caching
    * Helper functions: crop, decimate, smooth, prepare_display_data
    * Maintains 30+ FPS with 2048→300 point decimation
+   * **Fixed: Prevents original_x_data overwrite during display updates**
 2. ✅ Implemented spectrometer controller thread (`hardware/spectrometer_controller.py`)
    * Session-based scan validity tracking (solves 6-second integration problem)
    * Queue-based command/result interface
@@ -651,16 +677,48 @@ spectro_screen.exit()
    * Scan averaging (0-50 scans)
    * Seabreeze integration with hardware limit clamping
 3. ✅ Created live spectrometer screen (`ui/spectrometer_screen.py`)
-   * Real-time spectral plot display
+   * Real-time spectral plot display at ~30 FPS
    * Session validity checking (automatic stale scan discard)
    * Freeze/capture workflow
    * Dark/white reference capture UI
    * Status display (mode, integration, references)
+   * **Fixed: Optimized command sequencing to prevent session cycling**
 4. ✅ Integrated spectrometer components into main.py
    * Queue-based communication between screen and controller
    * State machine integration (MENU ↔ SPECTROMETER)
    * Thread lifecycle management (start/stop)
    * Clean separation of concerns
+   * **Fixed: Default settings now match between dataclass and config**
+5. ✅ Enhanced ButtonHandler reliability
+   * 3-attempt retry logic for GPIO edge detection failures
+   * Automatic pin cleanup and re-initialization
+   * Robust error recovery for reliable startup
+
+**Critical Bug Fixes:**
+
+1. **Integration Time Conflict (main.py)**
+   * **Problem**: SpectrometerSettings defaulted to 100ms but config.py specified 1000ms
+   * **Symptom**: Integration time flashing between values, settings conflicts
+   * **Solution**: Changed dataclass defaults to use config values
+   * **File**: `main.py:48-50`
+
+2. **Array Length Mismatch (plotting.py)**
+   * **Problem**: `update_spectrum` called `set_x_data_static()` which overwrote `original_x_data` with decimated display data
+   * **Symptom**: "Wavelengths and intensities must have same length" errors after first update
+   * **Solution**: Directly update `display_x_data` without touching `original_x_data`
+   * **File**: `ui/plotting.py:830-840`
+
+3. **Session Cycling (spectrometer_screen.py)**
+   * **Problem**: Commands sent in rapid succession (START_SESSION → UPDATE_SETTINGS → SET_MODE) caused multiple session increments
+   * **Symptom**: Rapid session ID changes, discarded scans
+   * **Solution**: Sync settings BEFORE starting session, reorder command sequence
+   * **File**: `ui/spectrometer_screen.py:145-153`
+
+4. **GPIO Edge Detection Failures (button_handler.py)**
+   * **Problem**: GPIO pins from previous run not properly cleaned up, edge detection already set
+   * **Symptom**: "Failed to add edge detection" error on startup, requiring restart
+   * **Solution**: 3-attempt retry with cleanup, re-setup as INPUT, proper delays
+   * **File**: `hardware/button_handler.py:82-90, 159-197`
 
 **Benefits Achieved:**
 
@@ -669,34 +727,52 @@ spectro_screen.exit()
 * Thread-safe architecture with proper event coordination
 * Centralized configuration for easy maintenance
 * Improved code documentation and maintainability
+* **Live spectrometer plotting at 30 FPS with 1516-pixel sensor**
+* **Reliable startup even after unclean shutdown**
 
-## 9. Next Steps (Recommended Order)
+## 9. Next Steps (Remaining Work)
 
-### Phase 2: Complete Hardware Layer
+### Phase 3: Data Management (High Priority)
+
+The application is now fully functional for live data viewing. The remaining work is primarily for data persistence:
+
+1. **Create data_manager.py** - Background thread for saving spectral data
+   * Implement DataManager class with save queue processing
+   * CSV file writing with daily file rotation
+   * Matplotlib plot generation and saving to PNG
+   * Thread-safe file I/O operations
+   * Add full Doxygen documentation
+   * **Status**: Not started
+
+2. **Implement save functionality in spectrometer_screen.py**
+   * Create SaveRequest packets from frozen data
+   * Send to data_manager_save_queue when user presses ENTER on frozen plot
+   * Show save confirmation feedback
+   * **Status**: Placeholder exists, needs implementation
+
+3. **Test data saving workflow**
+   * Verify CSV format matches requirements
+   * Test plot generation
+   * Verify file permissions and paths
+   * **Status**: Pending implementation
+
+### Phase 4: Optional Enhancements
 
 1. **Create temp_sensor.py** - Temperature monitoring (optional feature)
-2. **Create spectrometer_controller.py** - Core spectrometer functionality (CRITICAL PATH)
-3. **Update main.py** - Instantiate and integrate temp_sensor
-4. **Test menu system** - Verify date/time editing and network display work correctly
+   * Implement TempSensorInfo class with background thread
+   * MCP9808 sensor via SMBus2
+   * Display temperature in menu or status bar
+   * **Status**: Not started (low priority)
 
-### Phase 3: Build UI Components
+2. **Add auto-integration feature**
+   * Implement algorithm from config.AUTO_INTEGRATION
+   * Auto-adjust integration time for optimal signal
+   * **Status**: Config exists, not implemented
 
-1. **Create plotting.py** - Migrate plotter classes
-2. **Create spectrometer_screen.py** - Migrate live view screen
-3. **Update main.py** - Add spectrometer screen to state machine
-
-### Phase 4: Data Management
-
-1. **Create data/ directory and** `__init__.py`
-2. **Create data_manager.py** - File I/O and CSV operations
-3. **Update main.py** - Integrate data manager
-
-### Phase 5: Testing & Documentation
-
-1. **Add Doxygen comments to button_handler.py**
-2. **Test all integrated components**
-3. **Update this guide with final architecture**
-4. **Create user documentation**
+3. **Enhanced error handling**
+   * More detailed error messages
+   * Recovery strategies for hardware failures
+   * **Status**: Basic error handling in place
 
 ## 10. Development Guidelines Reminder
 
@@ -712,16 +788,20 @@ When implementing new components, always follow these principles:
 
 ## 11. Testing Checklist
 
-Before marking a component as complete:
+Current Component Status:
 
-* [ ] No circular imports (check with import graph)
-* [ ] All functions have Doxygen documentation
-* [ ] Thread-safe access to shared state
-* [ ] Graceful shutdown when shutdown_flag is set
-* [ ] Proper error handling and logging
-* [ ] Input validation with assertions
-* [ ] Code follows NASA-inspired safety principles
-* [ ] Linter compliance (pylint, mypy)
+* [x] No circular imports (check with import graph)
+* [x] All functions have Doxygen documentation
+* [x] Thread-safe access to shared state
+* [x] Graceful shutdown when shutdown_flag is set
+* [x] Proper error handling and logging
+* [x] Input validation with assertions
+* [x] Code follows NASA-inspired safety principles
+* [x] Linter compliance (verified with automatic formatting)
+* [x] Live spectrometer plotting functional
+* [x] Button handler startup reliability
+* [ ] Data saving to CSV (pending implementation)
+* [ ] Matplotlib plot generation (pending implementation)
 
 ---
 

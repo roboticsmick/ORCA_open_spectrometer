@@ -12,8 +12,17 @@ import pygame
 # Local imports
 import config
 from hardware import button_handler, leak_sensor, network_info, spectrometer_controller
+
 # from hardware import temp_sensor
-from ui import splash_screen, terms_screen, leak_warning, menu_system, display_utils, spectrometer_screen
+from ui import (
+    splash_screen,
+    terms_screen,
+    leak_warning,
+    menu_system,
+    display_utils,
+    spectrometer_screen,
+)
+
 # from data import data_manager
 
 # Disable audio driver
@@ -35,6 +44,7 @@ white_reference_required = True
 # 2. SHARED DATA STRUCTURES (MODELS)
 # ==============================================================================
 
+
 @dataclass
 class SpectrometerSettings:
     """
@@ -45,27 +55,34 @@ class SpectrometerSettings:
         collection_mode: Data collection mode ("RAW" or "REFLECTANCE")
         scans_to_average: Number of scans to average (0-50, where 0 means no averaging)
     """
-    integration_time_ms: int = 100
-    collection_mode: str = "RAW"
-    scans_to_average: int = 1
+
+    integration_time_ms: int = config.SPECTROMETER.DEFAULT_INTEGRATION_TIME_MS
+    collection_mode: str = config.MODES.DEFAULT_COLLECTION_MODE
+    scans_to_average: int = config.SPECTROMETER.DEFAULT_SCANS_TO_AVERAGE
+
 
 @dataclass
 class CaptureResult:
     """Data packet sent FROM the Spectrometer thread TO the main UI thread."""
+
     wavelengths: np.ndarray
     intensities: np.ndarray
     settings: SpectrometerSettings
     timestamp: datetime.datetime
 
+
 @dataclass
 class SaveRequest:
     """Data packet sent FROM the main UI thread TO the Data Manager thread."""
+
     result_data: CaptureResult
     spectra_type: str  # e.g., "RAW", "REFLECTANCE", "DARK", "WHITE"
+
 
 # ==============================================================================
 # 3. DISPLAY MANAGEMENT FUNCTIONS
 # ==============================================================================
+
 
 def initialize_display():
     """
@@ -97,7 +114,9 @@ def initialize_display():
         screen = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
         pygame.mouse.set_visible(False)
 
-        print(f"Adafruit PiTFT: Pygame surface created ({config.SCREEN_WIDTH}x{config.SCREEN_HEIGHT})")
+        print(
+            f"Adafruit PiTFT: Pygame surface created ({config.SCREEN_WIDTH}x{config.SCREEN_HEIGHT})"
+        )
         return screen
 
     else:
@@ -114,12 +133,16 @@ def initialize_display():
         screen = pygame.display.set_mode((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
         pygame.display.set_caption("PySB-App Spectrometer")
 
-        print(f"Standard Pygame window initialized ({config.SCREEN_WIDTH}x{config.SCREEN_HEIGHT})")
+        print(
+            f"Standard Pygame window initialized ({config.SCREEN_WIDTH}x{config.SCREEN_HEIGHT})"
+        )
         return screen
+
 
 # ==============================================================================
 # 4. MAIN APPLICATION ORCHESTRATOR
 # ==============================================================================
+
 
 def main():
     """Initializes all components, starts threads, and runs the main UI loop."""
@@ -145,19 +168,21 @@ def main():
     spec_controller_inst = spectrometer_controller.SpectrometerController(
         shutdown_flag=shutdown_flag,
         request_queue=spectrometer_request_queue,
-        result_queue=spectrometer_result_queue
+        result_queue=spectrometer_result_queue,
     )
     # data_manager_inst = data_manager.DataManager(shutdown_flag, data_manager_save_queue)
 
     # --- Create UI Screen Instances ---
-    menu_screen = menu_system.MenuSystem(screen, button_handler_inst, spectrometer_settings, network_info_inst)
+    menu_screen = menu_system.MenuSystem(
+        screen, button_handler_inst, spectrometer_settings, network_info_inst
+    )
     spectro_screen = spectrometer_screen.SpectrometerScreen(
         screen,
         button_handler_inst,
         spectrometer_settings,
         spectrometer_request_queue,
         spectrometer_result_queue,
-        data_manager_save_queue
+        data_manager_save_queue,
     )
 
     # --- Start Background Threads ---
@@ -168,7 +193,7 @@ def main():
     # data_manager_inst.start()
 
     # --- Main Application Logic ---
-    app_state = "MENU" # Initial state
+    app_state = "MENU"  # Initial state
     try:
         # --- Initial Startup Sequence ---
         splash_screen.show(screen, leak_detected_flag)
@@ -197,7 +222,7 @@ def main():
                 leak_warning.show(screen)
                 display_utils.update_display(screen)
                 shutdown_flag.set()
-                continue # Skip the rest of the loop
+                continue  # Skip the rest of the loop
 
             # --- State Machine ---
             if app_state == "MENU":
@@ -211,10 +236,10 @@ def main():
                 # Update flags if settings were changed in the menu
                 if menu_screen.dark_reference_required:
                     dark_reference_required = True
-                    menu_screen.dark_reference_required = False # Reset flag
+                    menu_screen.dark_reference_required = False  # Reset flag
                 if menu_screen.white_reference_required:
                     white_reference_required = True
-                    menu_screen.white_reference_required = False # Reset flag
+                    menu_screen.white_reference_required = False  # Reset flag
 
                 menu_screen.draw()
 
@@ -233,7 +258,7 @@ def main():
 
             # --- Screen Update ---
             display_utils.update_display(screen)  # Use hardware-aware display update
-            clock.tick(30) # Limit frame rate
+            clock.tick(30)  # Limit frame rate
 
     except KeyboardInterrupt:
         print("Keyboard interrupt detected. Shutting down.")
@@ -241,7 +266,7 @@ def main():
     finally:
         # --- Cleanup: Stop all threads and cleanup resources ---
         print("Initiating shutdown...")
-        shutdown_flag.set() # Ensure all threads see the flag
+        shutdown_flag.set()  # Ensure all threads see the flag
         leak_sensor_inst.stop()
         network_info_inst.stop()
         button_handler_inst.cleanup()
@@ -250,6 +275,7 @@ def main():
         # data_manager_inst.stop()
         pygame.quit()
         print("Application finished.")
+
 
 if __name__ == "__main__":
     main()
