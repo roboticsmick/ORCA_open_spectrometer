@@ -238,6 +238,34 @@ echo 0 > /sys/class/graphics/fbcon/cursor_blink
 ls -l /dev/spidev*
 ```
 
+## Disable services for faster bootup
+
+To reduce boot time from 2+ minutes to ~20 seconds while keeping WiFi configuration.
+
+```bash
+# These are the slow, cloud-specific services
+sudo systemctl disable cloud-config.service
+sudo systemctl disable cloud-final.service
+sudo systemctl mask cloud-config.service
+sudo systemctl mask cloud-final.service
+
+# Disable all snap services
+sudo systemctl disable snapd.service
+sudo systemctl disable snapd.socket
+sudo systemctl disable snapd.seeded.service
+sudo systemctl mask snapd.service
+sudo systemctl mask snapd.socket
+sudo systemctl mask snapd.seeded.service
+sudo systemctl mask snap.lxd.activate.service
+
+# Disable network-wait 
+sudo systemctl disable NetworkManager-wait-online.service
+sudo systemctl mask NetworkManager-wait-online.service
+
+# Reboot
+sudo reboot
+```
+
 ## Troubleshooting
 
 ### Common Issues

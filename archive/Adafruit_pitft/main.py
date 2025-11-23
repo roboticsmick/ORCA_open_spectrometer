@@ -54,7 +54,7 @@ USE_LEAK_SENSOR = True  # Set to True if the external leak sensor is connected (
 USE_SPECTROMETER = (
     True  # Set to True if the spectrometer is connected and should be used
 )
-USE_TEMP_SENSOR_IF_AVAILABLE = False  # Set to True if MCP9808 is connected
+USE_TEMP_SENSOR_IF_AVAILABLE = True  # Set to True if MCP9808 is connected
 
 # Attempt to import hardware-specific libraries only if configured
 # RPi_GPIO defined globally for type hinting and conditional access
@@ -259,6 +259,9 @@ if DEFAULT_COLLECTION_MODE not in AVAILABLE_COLLECTION_MODES:
         DEFAULT_COLLECTION_MODE = MODE_RAW  # Fallback
         AVAILABLE_COLLECTION_MODES = (MODE_RAW,)  # Ensure it's a tuple
 
+# Spectrometer Settings
+WAVELENGTH_RANGE_MIN_NM = 400.0  # Minimum wavelength to display (nm)
+WAVELENGTH_RANGE_MAX_NM = 620.0  # Maximum wavelength to display (nm)
 
 # Integration Time (ms)
 DEFAULT_INTEGRATION_TIME_MS = 1000
@@ -321,7 +324,7 @@ else:  # Default to Pimoroni Display HAT Mini (or other if USE_DISPLAY_HAT is tr
 
 PIN_HALL_UP = 20
 PIN_HALL_DOWN = 21
-PIN_HALL_ENTER = 1
+PIN_HALL_ENTER = 19
 PIN_HALL_BACK = 12
 
 PIN_LEAK = 26
@@ -1927,6 +1930,12 @@ class SpectrometerScreen:
                 f"  Wavelengths: {self.wavelengths[0]:.1f} to {self.wavelengths[-1]:.1f} nm ({len(self.wavelengths)} points)"
             )
 
+            # Log if wavelength cropping will be applied during display
+            if WAVELENGTH_RANGE_MIN_NM is not None or WAVELENGTH_RANGE_MAX_NM is not None:
+                logger.info(
+                    f"  Wavelength cropping configured: {WAVELENGTH_RANGE_MIN_NM}-{WAVELENGTH_RANGE_MAX_NM} nm "
+                    f"(will be applied during data processing)"
+                )
             try:
                 min_us, max_us = self.spectrometer.integration_time_micros_limits
                 self._hw_min_integration_us = int(min_us)
@@ -2263,7 +2272,7 @@ class SpectrometerScreen:
         self._set_plotter_view_for_raw(preserve_y_axis=True)
         if self.fast_renderer:
             self.fast_renderer.plotter.clear_data()
-
+        
         self._needs_initial_rescale = True
         logger.debug(
             f"Auto-integ setup: Initial test integ set to {self._current_auto_integ_us} µs. Flagged for initial rescale."
@@ -2480,7 +2489,7 @@ class SpectrometerScreen:
                     self._hw_min_integration_us,
                     min(integ_time_for_capture_us, self._hw_max_integration_us),
                 )
-
+                
                 capture_start = time.perf_counter()
                 assert self.spectrometer is not None
                 self.spectrometer.integration_time_micros(integ_us_clamped)
@@ -2498,7 +2507,7 @@ class SpectrometerScreen:
                         f"Failed live capture or length mismatch in state {state}."
                     )
                     return
-
+                
                 processing_start = time.perf_counter()
                 processed_intensities = raw_intensities
                 is_reflectance_plot = False
@@ -2526,19 +2535,13 @@ class SpectrometerScreen:
                         Y_AXIS_REFLECTANCE_RESCALE_MAX_CEILING,
                     )
 
-                if (
-                    self._needs_initial_rescale
-                    and processed_intensities is not None
-                    and len(processed_intensities) > 0
-                ):
-                    self._calculate_and_set_new_y_max(
-                        processed_intensities, is_reflectance_plot
-                    )
+                if self._needs_initial_rescale and processed_intensities is not None and len(processed_intensities) > 0:
+                    self._calculate_and_set_new_y_max(processed_intensities, is_reflectance_plot)
                     self._needs_initial_rescale = False
-
+                
                 processing_time = time.perf_counter() - processing_start
                 timing_info["processing_time_ms"] = processing_time * 1000
-
+                
                 if state == self.STATE_AUTO_INTEG_RUNNING:
                     temp_data_for_scaling = processed_intensities
                     if (
@@ -2563,7 +2566,7 @@ class SpectrometerScreen:
                         float(self._hw_max_intensity_adc * Y_AXIS_RESCALE_FACTOR),
                     )
                     self.fast_renderer.set_y_limits(0, temp_y_max_for_plot)
-
+                
                 if self.wavelengths is not None:
                     current_renderer_original_wl = (
                         self.fast_renderer.plotter.original_x_data
@@ -2572,7 +2575,7 @@ class SpectrometerScreen:
                         current_renderer_original_wl, self.wavelengths
                     ):
                         self.fast_renderer.set_wavelengths(self.wavelengths)
-
+                
                 display_start = time.perf_counter()
                 success = self.fast_renderer.update_spectrum(
                     processed_intensities,
@@ -3162,13 +3165,9 @@ class SpectrometerScreen:
             logger.error(f"Error saving data to CSV {csv_path}: {e_csv}", exc_info=True)
             return False
 
-    def _calculate_and_set_new_y_max(
-        self, intensities: np.ndarray, is_reflectance: bool
-    ):
+    def _calculate_and_set_new_y_max(self, intensities: np.ndarray, is_reflectance: bool):
         """Calculates a new Y-axis max based on provided data and applies it."""
-        assert (
-            self.fast_renderer is not None
-        ), "Fast renderer must be available for Y-max calc"
+        assert self.fast_renderer is not None, "Fast renderer must be available for Y-max calc"
         if intensities is None or len(intensities) == 0:
             logger.warning("Cannot calculate Y-max from empty or None intensities.")
             return
@@ -3179,13 +3178,9 @@ class SpectrometerScreen:
             and LIVE_SMOOTHING_WINDOW_SIZE > 1
             and intensities.size >= LIVE_SMOOTHING_WINDOW_SIZE
         ):
-            data_to_find_max_from = apply_fast_smoothing(
-                intensities, LIVE_SMOOTHING_WINDOW_SIZE
-            )
+            data_to_find_max_from = apply_fast_smoothing(intensities, LIVE_SMOOTHING_WINDOW_SIZE)
 
-        max_val_for_scaling = (
-            np.max(data_to_find_max_from) if len(data_to_find_max_from) > 0 else 0.0
-        )
+        max_val_for_scaling = np.max(data_to_find_max_from) if len(data_to_find_max_from) > 0 else 0.0
 
         new_y_max_val = 0.0
         if is_reflectance:
@@ -3214,9 +3209,7 @@ class SpectrometerScreen:
             )
         else:
             self.fast_renderer.set_y_tick_format("{:.0f}")
-        logger.info(
-            f"Y-axis max automatically rescaled to: {self._current_y_max_for_plot:.2f}"
-        )
+        logger.info(f"Y-axis max automatically rescaled to: {self._current_y_max_for_plot:.2f}")
 
     def _rescale_y_axis(self):
         """Performs a manual Y-axis rescale by capturing a fresh spectrum."""
@@ -3295,9 +3288,7 @@ class SpectrometerScreen:
                     self.fast_renderer.plotter.clear_data()
                 return
 
-            self._calculate_and_set_new_y_max(
-                data_source_for_scaling, is_reflectance_plot_for_rescale
-            )
+            self._calculate_and_set_new_y_max(data_source_for_scaling, is_reflectance_plot_for_rescale)
 
         except AssertionError as ae:
             logger.error(f"AssertionError during Y-axis rescale: {ae}", exc_info=True)
@@ -3487,9 +3478,7 @@ class SpectrometerScreen:
                 plot_rect = self.fast_renderer.plotter.plot_widget_rect
                 self.screen.fill(BLACK, plot_rect)
                 if self.overlay_font:
-                    status_surf = self.overlay_font.render(
-                        "Select Calibration Method", True, YELLOW
-                    )
+                    status_surf = self.overlay_font.render("Select Calibration Method", True, YELLOW)
                     text_rect = status_surf.get_rect(center=plot_rect.center)
                     self.screen.blit(status_surf, text_rect)
             elif self._reflectance_refs_invalid_flag:
@@ -3620,7 +3609,6 @@ class SpectrometerScreen:
                 logger.error(f"Error closing spectrometer: {e}", exc_info=True)
         self.spectrometer = None
         logger.info("SpectrometerScreen cleanup complete.")
-
 
 class OptimizedPygamePlotter:
     """High-performance plotter with data decimation and numpy vectorization"""
@@ -4165,44 +4153,47 @@ class FastSpectralRenderer:
                 data_hash == self._last_raw_data_hash
                 and self._cached_display_data is not None
             ):
-                self.plotter.set_y_data(
-                    self._cached_display_data
-                )  # Use cached, already processed data
-                # No need to record frame time if using cache, as it's not a full processing cycle.
-                return True  # Indicate update was "successful" (used cache)
+                self.plotter.set_y_data(self._cached_display_data)
+                return True
             self._last_raw_data_hash = data_hash
 
         try:
             original_wavelengths = self.plotter.original_x_data
-            if original_wavelengths is None:  # Should be set by set_wavelengths
+            if original_wavelengths is None:
                 logger.warning(
                     "FastSpectralRenderer: original_x_data not set in plotter. Assuming default."
                 )
-                original_wavelengths = np.linspace(
-                    400, 800, len(intensities)
-                )  # Fallback
+                original_wavelengths = np.linspace(400, 800, len(intensities))
 
             # Use the global prepare_display_data function
-            # This function handles smoothing and decimation
-            _disp_wl, display_intensities = prepare_display_data(
-                wavelengths=original_wavelengths,  # Pass full resolution WL
-                intensities=intensities,  # Pass full resolution Intensities
-                display_width=self.max_display_points,  # Target for decimation
+            # This function handles cropping, smoothing and decimation
+            display_wavelengths, display_intensities = prepare_display_data(  # ← Keep both!
+                wavelengths=original_wavelengths,
+                intensities=intensities,
+                display_width=self.max_display_points,
                 apply_smoothing=apply_smoothing and self.smoothing_enabled,
                 smoothing_window=self.smoothing_window,
             )
 
-            self._cached_display_data = (
-                display_intensities.copy()
-            )  # Cache the final display data
+            self._cached_display_data = display_intensities.copy()
 
-            # OptimizedPygamePlotter expects Y data to match its display_x_data length
-            # prepare_display_data already returns decimated intensities
+            # **CRITICAL FIX**: Update plotter with cropped wavelengths
+            # Check if wavelengths have changed (cropped range differs from current)
+            current_plotter_wl = self.plotter.display_x_data
+            if current_plotter_wl is None or not np.array_equal(current_plotter_wl, display_wavelengths):
+                logger.debug(
+                    f"Updating plotter X-axis with cropped wavelengths: "
+                    f"{display_wavelengths[0]:.1f}-{display_wavelengths[-1]:.1f} nm "
+                    f"({len(display_wavelengths)} points)"
+                )
+                self.plotter.set_x_data_static(display_wavelengths)
+
+            # Set the cropped intensity data
             self.plotter.set_y_data(display_intensities)
 
             frame_time = time.perf_counter() - frame_start_time
             self.frame_times.append(frame_time)
-            if len(self.frame_times) > 100:  # Keep last 100 samples
+            if len(self.frame_times) > 100:
                 self.frame_times = self.frame_times[-100:]
 
             return True
@@ -4405,6 +4396,60 @@ def _load_font_safe(font_name_or_path: str | None, size: int) -> pygame.font.Fon
 
 
 # --- Spectral Helper Functions ---
+def crop_wavelength_range(
+    wavelengths: np.ndarray,
+    intensities: np.ndarray,
+    min_wavelength: float | None = None,
+    max_wavelength: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Crop spectral data to a specific wavelength range.
+
+    Args:
+        wavelengths: Array of wavelength values (nm)
+        intensities: Array of intensity values
+        min_wavelength: Minimum wavelength to keep (inclusive). None = no minimum filter
+        max_wavelength: Maximum wavelength to keep (inclusive). None = no maximum filter
+
+    Returns:
+        Tuple of (cropped_wavelengths, cropped_intensities)
+    """
+    assert isinstance(wavelengths, np.ndarray) and isinstance(intensities, np.ndarray)
+    assert len(wavelengths) == len(intensities), "Wavelengths and intensities must have same length"
+
+    # If no cropping is requested, return copies
+    if min_wavelength is None and max_wavelength is None:
+        return wavelengths.copy(), intensities.copy()
+
+    # Create boolean mask for wavelengths in range
+    mask = np.ones(len(wavelengths), dtype=bool)
+
+    if min_wavelength is not None:
+        mask &= wavelengths >= min_wavelength
+
+    if max_wavelength is not None:
+        mask &= wavelengths <= max_wavelength
+
+    # Apply mask
+    cropped_wavelengths = wavelengths[mask]
+    cropped_intensities = intensities[mask]
+
+    # Ensure we got some data
+    if len(cropped_wavelengths) == 0:
+        logger.warning(
+            f"Wavelength crop resulted in empty array. Range: {min_wavelength}-{max_wavelength} nm, "
+            f"Data range: {wavelengths[0]:.1f}-{wavelengths[-1]:.1f} nm. Returning original data."
+        )
+        return wavelengths.copy(), intensities.copy()
+
+    logger.debug(
+        f"Cropped wavelength range: {cropped_wavelengths[0]:.1f}-{cropped_wavelengths[-1]:.1f} nm "
+        f"({len(cropped_wavelengths)} points from original {len(wavelengths)})"
+    )
+
+    return cropped_wavelengths, cropped_intensities
+
+
 def decimate_spectral_data_for_display(
     wavelengths: np.ndarray, intensities: np.ndarray, target_points: int = 300
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -4470,14 +4515,24 @@ def prepare_display_data(
     apply_smoothing: bool = True,
     smoothing_window: int = 5,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Complete optimization pipeline"""
-    if apply_smoothing and smoothing_window > 1:
-        smoothed_intensities = apply_fast_smoothing(intensities, smoothing_window)
-    else:
-        smoothed_intensities = intensities.copy()  # Ensure it's a copy if not smoothed
+    """Complete optimization pipeline with wavelength cropping, smoothing, and decimation"""
+    # Step 1: Crop to desired wavelength range (using global constants)
+    cropped_wl, cropped_int = crop_wavelength_range(
+        wavelengths,
+        intensities,
+        min_wavelength=WAVELENGTH_RANGE_MIN_NM,
+        max_wavelength=WAVELENGTH_RANGE_MAX_NM,
+    )
 
+    # Step 2: Apply smoothing if requested
+    if apply_smoothing and smoothing_window > 1:
+        smoothed_intensities = apply_fast_smoothing(cropped_int, smoothing_window)
+    else:
+        smoothed_intensities = cropped_int.copy()  # Ensure it's a copy if not smoothed
+
+    # Step 3: Decimate for display performance
     return decimate_spectral_data_for_display(
-        wavelengths, smoothed_intensities, display_width
+        cropped_wl, smoothed_intensities, display_width
     )
 
 
@@ -5051,3 +5106,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

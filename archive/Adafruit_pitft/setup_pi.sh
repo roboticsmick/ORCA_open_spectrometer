@@ -4,31 +4,15 @@ set -e
 
 # === Configuration ===
 PROJECT_DIR_NAME="pysb-app"
-VENV_DIR_NAME="pysb_venv"
-SWAP_SIZE="2G"
-PKG_MANAGER_TIMEOUT=180
+VENV_DIR_NAME="pysb_venv" # Changed to pysb_venv to match your Python script
+SWAP_SIZE="2G" # Increased to 2G, as 1G might still be tight for some compilations/matplotlib
+PKG_MANAGER_TIMEOUT=180 # Increased timeout slightly
 
 # === Script Variables ===
 ACTUAL_USER=""
 ACTUAL_HOME=""
 PROJECT_DIR_PATH=""
 VENV_PATH=""
-
-# === Python Package Requirements (Integrated) ===
-PYTHON_PACKAGES=(
-    "numpy"
-    "pyusb"
-    "matplotlib"
-    "pygame"
-    "pygame-menu"
-    "spidev"
-    "RPi.GPIO"
-    "rpi-lgpio"
-    "wheel"
-    "setuptools"
-    # Note: seabreeze[pyseabreeze] is handled separately due to compilation requirements
-    # Note: displayhatmini removed for Adafruit PiTFT compatibility
-)
 
 # === Helper Functions ===
 critical_error() {
@@ -37,7 +21,7 @@ critical_error() {
 warning() {
     echo "" >&2; echo "WARNING: $1" >&2;
 }
-info() {
+info() { # Added info function for consistency
     echo "[INFO] $1"
 }
 check_root() {
@@ -110,7 +94,7 @@ configure_swap() {
             sudo fallocate -l "${SWAP_SIZE}" /swapfile || { info "fallocate failed, using dd (slower)..."; sudo dd if=/dev/zero of=/swapfile bs=1M count=$(($(numfmt --from=iec $SWAP_SIZE)/1024/1024)) status=progress || critical_error "dd failed."; }
             sudo chmod 600 /swapfile; sudo mkswap /swapfile; sudo swapon /swapfile
         else info "Existing swap file sufficient."; if ! swapon --show | grep -q /swapfile; then sudo swapon /swapfile; fi; fi
-    elif (( current_total_kb * 1024 < target_bytes / 2 )); then
+    elif (( current_total_kb * 1024 < target_bytes / 2 )); then # If no /swapfile and total swap is very low
         info "No /swapfile, low total swap. Creating."; sudo fallocate -l "${SWAP_SIZE}" /swapfile || { info "fallocate failed, using dd..."; sudo dd if=/dev/zero of=/swapfile bs=1M count=$(($(numfmt --from=iec $SWAP_SIZE)/1024/1024)) status=progress || critical_error "dd failed."; }
         sudo chmod 600 /swapfile; sudo mkswap /swapfile; sudo swapon /swapfile
     else info "Sufficient swap or /swapfile not used. Skipping creation."; free -h; return 0; fi
@@ -139,21 +123,21 @@ install_system_packages() {
                  libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
                  libportmidi-dev libfreetype6-dev libjpeg-dev libpng-dev libtiff5-dev \
                  cmake device-tree-compiler libraspberrypi-dev python3-evdev dphys-swapfile \
-                 python3-rpi.gpio python3-spidev python3-smbus network-manager
+                 python3-rpi.gpio python3-spidev python3-smbus network-manager # System level for hardware access
     )
     info "Installing: ${pkgs[*]}"; wait_for_apt_lock
     if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${pkgs[@]}"; then critical_error "Failed to install system packages."; fi
     info "System packages installed."
 }
-enable_spi_i2c() {
+enable_spi_i2c() { # Combined SPI and I2C
     info "======================================"; info "Enabling SPI & I2C Interfaces"
     local cfg="/boot/firmware/config.txt"; if [ ! -f $cfg ]; then cfg="/boot/config.txt"; fi
     if [ ! -f $cfg ]; then warning "config.txt not found. Cannot auto-enable SPI/I2C."; return; fi
     info "Using config: $cfg"
     for iface_param in "dtparam=spi=on" "dtparam=i2c_arm=on"; do
-        iface_name=$(echo "$iface_param" | cut -d'=' -f1 | cut -d'=' -f2 | sed 's/dtparam=//; s/_arm//' | tr '[:lower:]' '[:upper:]')
+        iface_name=$(echo "$iface_param" | cut -d'=' -f1 | cut -d'=' -f2 | sed 's/dtparam=//; s/_arm//' | tr '[:lower:]' '[:upper:]') # Extracts SPI or I2C
         if grep -q -E "^\s*${iface_param}" "$cfg"; then info "$iface_name interface already enabled."; else
-            info "Enabling $iface_name interface..."; sudo sed -i -E "s:^\s*($(echo $iface_param | sed 's/=on/=off/')):#\1:" "$cfg"
+            info "Enabling $iface_name interface..."; sudo sed -i -E "s:^\s*($(echo $iface_param | sed 's/=on/=off/')):#\1:" "$cfg" # Comment out "off" version
             if ! grep -q -E "^\s*${iface_param}" "$cfg"; then echo "$iface_param" | sudo tee -a "$cfg" > /dev/null; fi
             info "$iface_name interface enabled. Reboot required."
         fi
@@ -161,7 +145,7 @@ enable_spi_i2c() {
 }
 setup_user_permissions() {
     info "======================================"; info "Setting User Permissions for Hardware"
-    local groups=("video" "i2c" "gpio" "spi" "dialout" "input" "render" "plugdev")
+    local groups=("video" "i2c" "gpio" "spi" "dialout" "input" "render" "plugdev") # Added input, render, plugdev
     for group in "${groups[@]}"; do
         if getent group "$group" >/dev/null; then
             if groups "$ACTUAL_USER" | grep -q -w "$group"; then info "User '$ACTUAL_USER' already in '$group'."; else
@@ -169,45 +153,6 @@ setup_user_permissions() {
             fi; else info "Group '$group' not found. Skipping."; fi
     done
 }
-
-setup_console_cursor_control() {
-    info "======================================"; info "Setting Up Console Cursor Control for PiTFT"
-    
-    # Create udev rules for persistent cursor control permissions
-    info "Creating udev rules for cursor control..."
-    local cursor_rules="/etc/udev/rules.d/99-pitft-console.rules"
-    
-    cat << 'EOF' | sudo tee "$cursor_rules" > /dev/null
-# PiTFT Console cursor control permissions
-SUBSYSTEM=="graphics", KERNEL=="fbcon", ACTION=="add", RUN+="/bin/chmod 666 /sys/class/graphics/fbcon/cursor_blink"
-SUBSYSTEM=="vtconsole", KERNEL=="vtcon1", ACTION=="add", RUN+="/bin/chmod 666 /sys/class/vtconsole/vtcon1/bind"
-
-# Alternative approach - set permissions on boot
-ACTION=="add", SUBSYSTEM=="graphics", KERNEL=="fbcon", RUN+="/bin/sh -c 'sleep 1; chmod 666 /sys/class/graphics/fbcon/cursor_blink'"
-ACTION=="add", SUBSYSTEM=="vtconsole", KERNEL=="vtcon1", RUN+="/bin/sh -c 'sleep 1; chmod 666 /sys/class/vtconsole/vtcon1/bind'"
-EOF
-
-    info "Cursor control udev rules created at $cursor_rules"
-    
-    # Set immediate permissions if the files exist
-    if [ -f /sys/class/graphics/fbcon/cursor_blink ]; then
-        info "Setting immediate cursor_blink permissions..."
-        sudo chmod 666 /sys/class/graphics/fbcon/cursor_blink
-    fi
-    
-    if [ -f /sys/class/vtconsole/vtcon1/bind ]; then
-        info "Setting immediate vtcon1 bind permissions..."
-        sudo chmod 666 /sys/class/vtconsole/vtcon1/bind
-    fi
-    
-    # Reload udev rules
-    info "Reloading udev rules..."
-    sudo udevadm control --reload-rules
-    sudo udevadm trigger
-    
-    info "Console cursor control configured. Full effect after reboot."
-}
-
 configure_terminal() {
     info "======================================"; info "Configuring Terminal History Search"
     local rc="$ACTUAL_HOME/.inputrc"
@@ -216,9 +161,9 @@ configure_terminal() {
         sudo chown "$ACTUAL_USER:$ACTUAL_USER" "$rc"; info "Terminal history configured. Effective new shells."; fi
 }
 
-setup_adafruit_pitft() {
+setup_adafruit_pitft() { # New function for Adafruit PiTFT
     info "======================================"; info "Setting up Adafruit PiTFT 2.8c"
-    local script_src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local script_src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" # Directory where this setup_pi.sh is
     local adafruit_repo_dir="$script_src_dir/Raspberry-Pi-Installer-Scripts"
 
     if [ ! -d "$adafruit_repo_dir" ]; then
@@ -226,24 +171,28 @@ setup_adafruit_pitft() {
         if ! git clone https://github.com/adafruit/Raspberry-Pi-Installer-Scripts.git "$adafruit_repo_dir"; then
             critical_error "Failed to clone Adafruit Installer Scripts."
         fi
-        sudo chown -R "$ACTUAL_USER:$ACTUAL_USER" "$adafruit_repo_dir"
+        sudo chown -R "$ACTUAL_USER:$ACTUAL_USER" "$adafruit_repo_dir" # Own the clone
     else info "Adafruit Installer Scripts repo found at $adafruit_repo_dir"; fi
 
     if [ ! -f "$adafruit_repo_dir/adafruit-pitft.py" ]; then critical_error "adafruit-pitft.py not found."; fi
 
     info "Running Adafruit PiTFT Installer for 2.8c, console mode, no-reboot..."
-    
-    # Install script dependencies
+    # Ensure script dependencies (click, adafruit-python-shell) are installed for system python3
+    # The Adafruit script is run with `sudo python3`, so its dependencies need to be accessible to that.
     if ! python3 -c "import click; import adafruit_shell" &> /dev/null; then
         info "Installing click & adafruit-python-shell for Adafruit installer script (system-wide)..."
         sudo python3 -m pip install click adafruit-python-shell 
     fi
     
     cd "$adafruit_repo_dir"
+    # Choose rotation: 90 for landscape (USB right), 270 for landscape (USB left)
+    # Your main.py currently does its own 180 deg rotation. If Adafruit driver handles it, remove Pygame rotation.
+    # Let's try --rotation=270 as an example to see if it matches your desired orientation.
+    # If --install-type=console, then HDMI should be off and PiTFT is /dev/fb1
     if ! sudo -E env PATH="$PATH" python3 adafruit-pitft.py --display=28c --rotation=270 --install-type=console --reboot=no; then
         warning "Adafruit PiTFT installer script finished with warning/error. Check output. Manual config may be needed."
     else info "Adafruit PiTFT installer script completed."; fi
-    cd "$script_src_dir"
+    cd "$script_src_dir" # Go back to original directory
     info "Adafruit PiTFT setup process finished. Reboot required for display changes."
 }
 
@@ -258,14 +207,34 @@ setup_python_venv() {
     info "Upgrading pip, setuptools, wheel in venv..."
     sudo -u "$ACTUAL_USER" "$venv_python" -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
-    # Install integrated Python packages
-    info "Installing Python packages into venv..."
-    for package in "${PYTHON_PACKAGES[@]}"; do
-        info "Installing $package..."
-        if ! sudo -u "$ACTUAL_USER" "$venv_pip" install --no-cache-dir "$package"; then
-            warning "Failed to install Python package '$package'."
+    local script_src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local req_file="$script_src_dir/requirements.txt"
+
+    if [ -f "$req_file" ]; then
+        info "Copying requirements.txt to project directory..."
+        sudo -u "$ACTUAL_USER" cp "$req_file" "$PROJECT_DIR_PATH/requirements.txt"
+        info "Installing packages from requirements.txt into venv..."
+        # Modify requirements.txt on the fly if displayhatmini is there and we don't want it
+        local temp_req_file=$(mktemp)
+        if grep -q "displayhatmini" "$PROJECT_DIR_PATH/requirements.txt"; then
+            info "Temporarily removing 'displayhatmini' from requirements for Adafruit PiTFT setup."
+            grep -v "displayhatmini" "$PROJECT_DIR_PATH/requirements.txt" > "$temp_req_file"
+            if ! sudo -u "$ACTUAL_USER" "$venv_pip" install --no-cache-dir -r "$temp_req_file"; then warning "Failed to install some packages from modified requirements.txt."; fi
+            rm "$temp_req_file"
+        else
+            if ! sudo -u "$ACTUAL_USER" "$venv_pip" install --no-cache-dir -r "$PROJECT_DIR_PATH/requirements.txt"; then warning "Failed to install some packages from requirements.txt."; fi
         fi
-    done
+    else
+        warning "requirements.txt not found in script directory. Python packages (except Seabreeze) must be manually specified or installed."
+        # Example of direct install if no requirements.txt - customize this list!
+        # local python_packages=("matplotlib" "pygame" "pygame-menu" "spidev" "RPi.GPIO" "numpy" "pyusb" "rpi-lgpio" "wheel" "setuptools")
+        # for package in "${python_packages[@]}"; do
+        #     info "Installing $package into venv..."
+        #     if ! sudo -u "$ACTUAL_USER" "$venv_pip" install --no-cache-dir "$package"; then
+        #         warning "Failed to install Python package '$package'."
+        #     fi
+        # done
+    fi
 
     info "Python packages installation process finished."
     info "To use the environment: cd $PROJECT_DIR_PATH && source $VENV_DIR_NAME/bin/activate"
@@ -273,8 +242,7 @@ setup_python_venv() {
     if [ -f "$bashrc" ] && ! grep -Fq "$PROJECT_DIR_PATH" "$bashrc"; then info "Adding venv hint to $bashrc..."
          { echo ""; echo "# Hint for ${PROJECT_DIR_NAME} venv"; echo "$hint"; } | sudo -u "$ACTUAL_USER" tee -a "$bashrc" > /dev/null; sudo chown "$ACTUAL_USER:$ACTUAL_USER" "$bashrc"; fi
 }
-
-install_seabreeze() {
+install_seabreeze() { # Using your original function for Seabreeze
     info "======================================"; info "Installing Seabreeze (Special Handling)"
     local venv_pip="$VENV_PATH/bin/pip"
     info "Installing seabreeze[pyseabreeze] (can take several minutes)..."
@@ -282,8 +250,7 @@ install_seabreeze() {
         warning "Failed to install seabreeze[pyseabreeze]."; echo "Manual install: cd $PROJECT_DIR_PATH && source $VENV_DIR_NAME/bin/activate && pip install seabreeze[pyseabreeze]"
     else info "Seabreeze installation successful."; fi
 }
-
-setup_seabreeze_udev() {
+setup_seabreeze_udev() { # Using your original function
     info "======================================"; info "Setting Seabreeze udev Rules"
     local rules="/etc/udev/rules.d/10-oceanoptics.rules"; local setup_cmd="$VENV_PATH/bin/seabreeze_os_setup"
     if [ -f "$rules" ]; then info "Seabreeze udev rules exist. Skipping."; echo "If needed, remove $rules and re-run, or run manually: sudo $setup_cmd"; return; fi
@@ -293,7 +260,7 @@ setup_seabreeze_udev() {
     else info "Seabreeze udev rules installed. Reloading..."; sudo udevadm control --reload-rules && sudo udevadm trigger; info "udev reloaded."; fi
 }
 
-copy_project_files_custom() {
+copy_project_files_custom() { # New function to copy main.py and assets
     info "======================================"; info "Copying Project Files (main.py, assets) to $PROJECT_DIR_PATH"
     local script_src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -301,33 +268,21 @@ copy_project_files_custom() {
     if [ -f "$script_src_dir/main.py" ]; then info "Copying main.py..."; sudo -u "$ACTUAL_USER" cp "$script_src_dir/main.py" "$PROJECT_DIR_PATH/"; else warning "main.py not found in script source dir."; fi
     # Copy assets directory
     if [ -d "$script_src_dir/assets" ]; then info "Copying assets/ directory..."; sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/assets" "$PROJECT_DIR_PATH/"; else warning "assets/ directory not found."; fi
-    # Copy lib directory (if it exists)
+    # Copy lib directory (if it exists, e.g., for local pyseabreeze if you used that approach)
     if [ -d "$script_src_dir/lib" ]; then info "Copying lib/ directory..."; sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/lib" "$PROJECT_DIR_PATH/"; fi
 
     sudo chown -R "$ACTUAL_USER:$ACTUAL_USER" "$PROJECT_DIR_PATH"
 }
 
-verify_setup() {
+verify_setup() { # Modified to reflect potential changes
     info "======================================"; info "Verifying Setup (Basic Checks)"
     info "Checking for SPI device nodes (post-reboot)..."; if ls /dev/spidev* >/dev/null 2>&1; then info "SPI devices:"; ls -l /dev/spidev*; else info "SPI device nodes not found (expected until reboot)."; fi
-    info "Checking Python pkgs in venv ($VENV_PATH)..."; local pkgs_check=("matplotlib" "pygame" "pygame_menu" "spidev" "RPi.GPIO" "numpy" "pyusb")
+    info "Checking Python pkgs in venv ($VENV_PATH)..."; local pkgs_check=("matplotlib" "pygame" "pygame_menu" "spidev" "RPi.GPIO" "numpy" "pyusb") # Removed displayhatmini, added numpy, pyusb
     local failed=(); local venv_py="$VENV_PATH/bin/python"
     if [ ! -x "$venv_py" ]; then warning "Venv Python not found. Skipping package check."; return; fi
     for pkg in "${pkgs_check[@]}"; do if sudo -u "$ACTUAL_USER" "$venv_py" -c "import $pkg" >/dev/null 2>&1; then echo "  - $pkg: OK"; else echo "  - $pkg: FAILED"; failed+=("$pkg"); fi; done
     info "Checking seabreeze:"; if sudo -u "$ACTUAL_USER" "$venv_py" -c "import seabreeze" >/dev/null 2>&1; then echo "  - seabreeze: OK"; else echo "  - seabreeze: NOT IMPORTED (check install)"; fi
     if [ ${#failed[@]} -gt 0 ]; then warning "Python pkgs failed import: ${failed[*]}"; else info "Checked Python pkgs imported OK."; fi
-    
-    # Check cursor control permissions
-    info "Checking cursor control permissions..."
-    if [ -f /sys/class/graphics/fbcon/cursor_blink ]; then
-        local perms=$(stat -c "%a" /sys/class/graphics/fbcon/cursor_blink 2>/dev/null || echo "000")
-        if [[ "$perms" == "666" ]]; then echo "  - cursor_blink permissions: OK (666)"; else echo "  - cursor_blink permissions: $perms (may need manual fix)"; fi
-    else echo "  - cursor_blink: Not available (normal until display setup)"; fi
-    
-    if [ -f /sys/class/vtconsole/vtcon1/bind ]; then
-        local perms=$(stat -c "%a" /sys/class/vtconsole/vtcon1/bind 2>/dev/null || echo "000")
-        if [[ "$perms" == "666" ]]; then echo "  - vtcon1 bind permissions: OK (666)"; else echo "  - vtcon1 bind permissions: $perms (may need manual fix)"; fi
-    else echo "  - vtcon1 bind: Not available (normal until display setup)"; fi
 }
 
 # === Main Script Logic ===
@@ -338,22 +293,21 @@ main() {
     check_root; get_actual_user
     check_date_time; check_internet
     
-    configure_swap
+    configure_swap # Uses SWAP_SIZE from top
     configure_needrestart
     update_system
     install_system_packages
     
-    enable_spi_i2c
+    enable_spi_i2c # Combined function
     setup_rtc
-    setup_adafruit_pitft
-    setup_console_cursor_control  # New: Sets up cursor control permissions
+    setup_adafruit_pitft # New: Sets up Adafruit display driver
     setup_user_permissions
     configure_terminal
     
-    setup_python_venv  # Now uses integrated package list
-    copy_project_files_custom
-    install_seabreeze
-    setup_seabreeze_udev
+    setup_python_venv # Creates project dir, venv, installs from requirements.txt (if present)
+    copy_project_files_custom # Copies main.py, assets, etc.
+    install_seabreeze # Installs seabreeze into the venv
+    setup_seabreeze_udev # Sets udev rules for seabreeze
 
     verify_setup
     
@@ -368,7 +322,6 @@ main() {
     info "  python3 main.py"
     info "Test seabreeze: python -m seabreeze.cseabreeze_backend ListDevices"
     info "Test RTC: sudo hwclock -r"
-    info "Test cursor control: echo 0 > /sys/class/graphics/fbcon/cursor_blink"
     echo "====================================="
 }
-main
+main # Execute
