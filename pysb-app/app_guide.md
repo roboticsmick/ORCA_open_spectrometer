@@ -225,7 +225,7 @@ All static application-wide constants are stored in `config.py` to allow for eas
   * DEFAULT_INTEGRATION_TIME_MS=1000
   * MIN_INTEGRATION_TIME_MS=100
   * MAX_INTEGRATION_TIME_MS=6000
-  * INTEGRATION_TIME_STEP_MS=100
+  * INTEGRATION_TIME_STEP_MS=50
   * HW_INTEGRATION_TIME_MIN_US=3800
   * HW_INTEGRATION_TIME_MAX_US=6000000
   * HW_INTEGRATION_TIME_BASE_US=10
@@ -553,6 +553,9 @@ Live spectrometer view screen for displaying spectral plots in real-time at ~30 
   * `save_queue`: Send save requests to data manager
 * **Live plotting**: Uses FastSpectralRenderer for high-performance visualization
 * **Freeze/capture**: Freeze current plot and save to CSV
+  * **Thread control in review state**: Spectrometer thread stops when reviewing frozen scan
+  * **Fresh data on unfreeze**: New session starts when returning to live view
+  * Prevents stale data and saves power during review
 * **Reference capture**: Dark and white reference capture workflows
 * **Status display**: Shows integration time, mode, scan averaging, reference status
 * **Optimized initialization**: Settings synced before session start to prevent rapid session cycling
@@ -608,6 +611,16 @@ spectro_screen.update()
   → result = result_queue.get_nowait()
   → if result.is_valid: update_plot(result)
   → else: discard_stale_scan()
+
+# Freeze scan (enter review) → stop session
+spectro_screen._freeze_current_data()
+  → request_queue.put(SpectrometerCommand(CMD_STOP_SESSION))
+  → Thread pauses, no background captures
+
+# Unfreeze (exit review) → start new session
+spectro_screen._unfreeze()
+  → request_queue.put(SpectrometerCommand(CMD_START_SESSION))
+  → Fresh scans begin from current spectrometer position
 
 # Exit screen → stop session
 spectro_screen.exit()
@@ -719,6 +732,13 @@ spectro_screen.exit()
    * **Symptom**: "Failed to add edge detection" error on startup, requiring restart
    * **Solution**: 3-attempt retry with cleanup, re-setup as INPUT, proper delays
    * **File**: `hardware/button_handler.py:82-90, 159-197`
+
+5. **Review State Thread Control (spectrometer_screen.py)** ✅ **FIXED 2025-11-23**
+   * **Problem**: Spectrometer thread continued capturing when reviewing frozen scans, and didn't restart fresh when returning to live view
+   * **Symptom**: Wasted battery/processing during review, stale data displayed when unfreezing
+   * **Solution**: Added `CMD_STOP_SESSION` in `_freeze_current_data()` and `CMD_START_SESSION` in `_unfreeze()`
+   * **File**: `ui/spectrometer_screen.py:334, 344`
+   * **Benefit**: Thread now properly pauses during review and always provides fresh data representative of current spectrometer position
 
 **Benefits Achieved:**
 

@@ -6,6 +6,7 @@ import calendar
 import config
 from ui import display_utils
 
+
 ##
 # @class MenuSystem
 # @brief Manages and renders the main menu, handling navigation and settings changes.
@@ -52,14 +53,18 @@ class MenuSystem:
         ## @var font_title
         # @brief Font for the menu title.
         try:
-            self.font_title = pygame.font.Font(config.FONTS.TITLE, config.FONT_SIZES.TITLE)
+            self.font_title = pygame.font.Font(
+                config.FONTS.TITLE, config.FONT_SIZES.TITLE
+            )
         except:
             self.font_title = pygame.font.Font(None, config.FONT_SIZES.TITLE)
 
         ## @var font_item
         # @brief Font for menu item labels.
         try:
-            self.font_item = pygame.font.Font(config.FONTS.MAIN, config.FONT_SIZES.MENU_ITEM)
+            self.font_item = pygame.font.Font(
+                config.FONTS.MAIN, config.FONT_SIZES.MENU_ITEM
+            )
         except:
             self.font_item = pygame.font.Font(None, config.FONT_SIZES.MENU_ITEM)
 
@@ -125,7 +130,9 @@ class MenuSystem:
                 "label": "Integration Time (ms)",
                 "type": "numeric",
                 "value_key": "integration_time_ms",
-                "min": 10, "max": 10000, "step": 10,
+                "min": config.SPECTROMETER.MIN_INTEGRATION_TIME_MS,
+                "max": config.SPECTROMETER.MAX_INTEGRATION_TIME_MS,
+                "step": config.SPECTROMETER.INTEGRATION_TIME_STEP_MS,
             },
             {
                 "label": "Collection Mode",
@@ -167,7 +174,9 @@ class MenuSystem:
                     self._change_value(1)
             else:
                 # Navigation mode: UP moves selection up
-                self._selected_index = (self._selected_index - 1) % len(self._menu_items)
+                self._selected_index = (self._selected_index - 1) % len(
+                    self._menu_items
+                )
 
         elif self.button_handler.get_pressed(config.BTN_DOWN):
             if self._edit_mode:
@@ -179,16 +188,18 @@ class MenuSystem:
                     self._change_value(-1)
             else:
                 # Navigation mode: DOWN moves selection down
-                self._selected_index = (self._selected_index + 1) % len(self._menu_items)
+                self._selected_index = (self._selected_index + 1) % len(
+                    self._menu_items
+                )
 
         elif self.button_handler.get_pressed(config.BTN_ENTER):
             selected_item = self._menu_items[self._selected_index]
             item_type = selected_item.get("type")
 
             if item_type == "action":
-                return selected_item.get("action") # e.g., "START_CAPTURE"
+                return selected_item.get("action")  # e.g., "START_CAPTURE"
             elif item_type in ["numeric", "choice"]:
-                self._edit_mode = not self._edit_mode # Toggle edit mode
+                self._edit_mode = not self._edit_mode  # Toggle edit mode
             elif item_type == "datetime":
                 if not self._edit_mode:
                     # Entering edit mode for datetime
@@ -256,7 +267,9 @@ class MenuSystem:
     # @details This method should be used for all time displays and CSV timestamps.
     def get_current_display_time(self):
         """Returns the current time with the time offset applied."""
-        assert isinstance(self._time_offset, datetime.timedelta), "Time offset must be a timedelta"
+        assert isinstance(
+            self._time_offset, datetime.timedelta
+        ), "Time offset must be a timedelta"
         try:
             return datetime.datetime.now() + self._time_offset
         except OverflowError:
@@ -328,7 +341,11 @@ class MenuSystem:
     def _change_date_field(self, delta):
         """Changes the selected date field (year, month, or day)."""
         assert self._datetime_being_edited is not None
-        assert self._editing_field in [self.FIELD_YEAR, self.FIELD_MONTH, self.FIELD_DAY]
+        assert self._editing_field in [
+            self.FIELD_YEAR,
+            self.FIELD_MONTH,
+            self.FIELD_DAY,
+        ]
         assert delta in [-1, 1]
 
         dt = self._datetime_being_edited
@@ -393,7 +410,9 @@ class MenuSystem:
                 year, max(1, min(12, month)), day, hour, minute, second
             )
         except ValueError as e:
-            print(f"WARNING: Invalid datetime: Y{year}-M{month}-D{day} H{hour}:M{minute}:S{second}. {e}")
+            print(
+                f"WARNING: Invalid datetime: Y{year}-M{month}-D{day} H{hour}:M{minute}:S{second}. {e}"
+            )
             return None
 
     ##
@@ -415,10 +434,10 @@ class MenuSystem:
         # Format: "2025-11-09 13:21"
         #          0123456789012345
         field_info = {
-            self.FIELD_YEAR: (0, 4),      # "2025"
-            self.FIELD_MONTH: (5, 7),     # "11"
-            self.FIELD_DAY: (8, 10),      # "09"
-            self.FIELD_HOUR: (11, 13),    # "13"
+            self.FIELD_YEAR: (0, 4),  # "2025"
+            self.FIELD_MONTH: (5, 7),  # "11"
+            self.FIELD_DAY: (8, 10),  # "09"
+            self.FIELD_HOUR: (11, 13),  # "13"
             self.FIELD_MINUTE: (14, 16),  # "21"
         }
 
@@ -462,7 +481,9 @@ class MenuSystem:
             hint = "X/Y: Navigate | A: Select/Edit | B: Back"
 
         hint_surface = self.font_info.render(hint, True, config.COLORS.YELLOW)
-        hint_rect = hint_surface.get_rect(centerx=config.SCREEN_WIDTH // 2, bottom=config.SCREEN_HEIGHT - 5)
+        hint_rect = hint_surface.get_rect(
+            centerx=config.SCREEN_WIDTH // 2, bottom=config.SCREEN_HEIGHT - 5
+        )
         self.screen.blit(hint_surface, hint_rect)
 
     ##
@@ -475,8 +496,12 @@ class MenuSystem:
         self.screen.fill(config.COLORS.BLACK)
 
         # Title (original code style: centered at top=8)
-        title_surf = self.font_title.render("OPEN SPECTRO MENU", True, config.COLORS.YELLOW)
-        self.screen.blit(title_surf, title_surf.get_rect(centerx=config.SCREEN_WIDTH // 2, top=8))
+        title_surf = self.font_title.render(
+            "OPEN SPECTRO MENU", True, config.COLORS.YELLOW
+        )
+        self.screen.blit(
+            title_surf, title_surf.get_rect(centerx=config.SCREEN_WIDTH // 2, top=8)
+        )
 
         # Items (original spacing: MENU_MARGIN_TOP=38, MENU_SPACING=19, MENU_MARGIN_LEFT=12)
         y_pos = config.MENU_MARGIN_TOP
@@ -505,7 +530,9 @@ class MenuSystem:
                 # Use edited datetime if currently editing this field, otherwise use display time
                 dt_to_display = (
                     self._datetime_being_edited
-                    if self._edit_mode and idx == self._selected_index and self._datetime_being_edited
+                    if self._edit_mode
+                    and idx == self._selected_index
+                    and self._datetime_being_edited
                     else self.get_current_display_time()
                 )
 
@@ -539,16 +566,24 @@ class MenuSystem:
                 if self._edit_mode and idx == self._selected_index:
                     if item["type"] == "datetime" and self._editing_field:
                         # For datetime: box around specific field (year, month, day, hour, minute)
-                        field_rect = self._calculate_field_rect(dt_to_display, value_x, y_pos)
+                        field_rect = self._calculate_field_rect(
+                            dt_to_display, value_x, y_pos
+                        )
                         if field_rect:
-                            pygame.draw.rect(self.screen, config.COLORS.BLUE, field_rect, 1)
+                            pygame.draw.rect(
+                                self.screen, config.COLORS.BLUE, field_rect, 1
+                            )
                     elif item["type"] in ["numeric", "choice"]:
                         # For numeric/choice: box around entire value
-                        value_rect = pygame.Rect(value_x, y_pos, value_surface.get_width(), value_surface.get_height())
+                        value_rect = pygame.Rect(
+                            value_x,
+                            y_pos,
+                            value_surface.get_width(),
+                            value_surface.get_height(),
+                        )
                         pygame.draw.rect(self.screen, config.COLORS.BLUE, value_rect, 1)
 
             y_pos += config.MENU_SPACING
 
         # Draw the hint text at the bottom
         self._draw_hints()
-

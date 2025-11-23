@@ -328,11 +328,21 @@ class SpectrometerScreen:
             else config.MODES.SPECTRA_TYPE_RAW
         )
         self._state = self.STATE_FROZEN
+
+        # Stop the spectrometer thread while reviewing frozen data
+        # This prevents unnecessary background captures and saves power
+        self.request_queue.put(SpectrometerCommand(CMD_STOP_SESSION))
+
         print("SpectrometerScreen: Data frozen for capture")
 
     def _unfreeze(self):
         """Unfreeze and return to live view."""
         self._state = self.STATE_LIVE_VIEW
+
+        # Start a new session to get fresh data representative of when user returned to live view
+        # This ensures the scan is from the current spectrometer position, not stale data
+        self.request_queue.put(SpectrometerCommand(CMD_START_SESSION))
+
         print("SpectrometerScreen: Returning to live view")
 
     def _save_frozen_data(self):
