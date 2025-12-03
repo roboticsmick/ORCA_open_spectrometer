@@ -88,6 +88,7 @@ class SpectrometerResult:
         session_id: Session ID when scan STARTED (for validity checking)
         spectra_type: Type of spectra (RAW, REFLECTANCE, DARK, WHITE)
         is_valid: Whether this scan is valid for the current session
+        raw_intensities: Raw intensities before reflectance calculation (only in REFLECTANCE mode)
     """
     wavelengths: np.ndarray
     intensities: np.ndarray
@@ -98,6 +99,7 @@ class SpectrometerResult:
     session_id: int
     spectra_type: str
     is_valid: bool
+    raw_intensities: Optional[np.ndarray] = None
 
 # ==============================================================================
 # SPECTROMETER CONTROLLER THREAD
@@ -519,6 +521,7 @@ class SpectrometerController:
         # Process data based on collection mode
         processed_intensities = raw_intensities
         spectra_type = self._current_capture_type
+        raw_intensities_for_result: Optional[np.ndarray] = None
 
         if (self._collection_mode == config.MODES.MODE_REFLECTANCE and
             self._current_capture_type == config.MODES.SPECTRA_TYPE_RAW):
@@ -526,6 +529,8 @@ class SpectrometerController:
             if self._dark_reference is not None and self._white_reference is not None:
                 processed_intensities = self._calculate_reflectance(raw_intensities)
                 spectra_type = config.MODES.SPECTRA_TYPE_REFLECTANCE
+                # Store raw intensities for saving alongside reflectance
+                raw_intensities_for_result = raw_intensities.copy()
             else:
                 print("WARNING: Reflectance mode but references not available. Sending raw data.")
 
@@ -539,7 +544,8 @@ class SpectrometerController:
             scans_to_average=self._scans_to_average,
             session_id=scan_session_id,  # Session ID when scan STARTED
             spectra_type=spectra_type,
-            is_valid=(scan_session_id == self._session_id)  # Valid if session hasn't changed
+            is_valid=(scan_session_id == self._session_id),  # Valid if session hasn't changed
+            raw_intensities=raw_intensities_for_result,  # Raw data for reflectance saves
         )
 
         # Send to result queue (non-blocking)

@@ -2,8 +2,8 @@
 
 This document provides a technical overview of the PySB-App, a Python-based spectrometer application designed for a Raspberry Pi with a touchscreen interface.
 
-**Last Updated:** 2025-11-23
-**Refactoring Status:** Phase 2 Complete (Live Spectrometer with Real-time Plotting) ✅
+**Last Updated:** 2025-12-03
+**Refactoring Status:** Phase 4 Complete (Calibration Workflow) ✅
 
 ---
 
@@ -67,7 +67,7 @@ A central `main.py` module orchestrates the application, managing the overall st
 
 ## 2. Current File Structure & Refactoring Status
 
-### ✅ Completed Components (Phase 1)
+### ✅ Completed Components (Phase 1, 2 & 3)
 
 ```text
 pysb-app/
@@ -94,7 +94,7 @@ pysb-app/
 │   ├── leak_sensor.py           # ✅ Leak detection thread (has Doxygen docs)
 │   ├── network_info.py          # ✅ Network monitoring thread (has Doxygen docs)
 │   ├── temp_sensor.py           # ❌ TODO: Temperature sensor thread
-│   └── spectrometer_controller.py # ❌ TODO: Spectrometer control thread
+│   └── spectrometer_controller.py # ✅ Spectrometer control thread (has Doxygen docs)
 │
 ├── ui/                          # ✅ User interface components
 │   ├── display_utils.py         # ✅ Drawing utilities (has Doxygen docs)
@@ -103,10 +103,11 @@ pysb-app/
 │   ├── leak_warning.py          # ✅ Leak warning display
 │   ├── menu_system.py           # ✅ Menu system with datetime editing (has Doxygen docs)
 │   ├── plotting.py              # ✅ Plotting & rendering classes (has Doxygen docs)
-│   └── spectrometer_screen.py   # ❌ TODO: Live spectrometer view
+│   └── spectrometer_screen.py   # ✅ Live spectrometer view with save workflow
 │
-└── data/                        # ❌ TODO: Data management layer
-    └── data_manager.py          # ❌ TODO: File I/O and CSV operations
+└── data/                        # ✅ Data management layer
+    ├── __init__.py              # ✅ Package init
+    └── data_manager.py          # ✅ File I/O, CSV operations, plot generation (has Doxygen docs)
 ```
 
 **Legend:**
@@ -416,7 +417,8 @@ Fresh scan starts → `scan.session_id = 44` → **Valid scan displayed**
 **Data Structures:**
 
 * `SpectrometerCommand`: Command packet (command_type, integration_time_ms, scans_to_average, collection_mode)
-* `SpectrometerResult`: Result packet (wavelengths, intensities, timestamp, session_id, spectra_type, is_valid)
+* `SpectrometerResult`: Result packet (wavelengths, intensities, timestamp, integration_time_ms, collection_mode, scans_to_average, session_id, spectra_type, is_valid, raw_intensities)
+* `SaveRequest` (in `data/data_manager.py`): Save packet (wavelengths, intensities, timestamp, integration_time_ms, scans_to_average, spectra_type, collection_mode, lens_type, temperature_c, raw_intensities_for_reflectance)
 
 **Thread Safety:**
 
@@ -642,19 +644,22 @@ spectro_screen.exit()
 * Provide thread-safe temperature getter
 * Add full Doxygen documentation
 
-### 7.2 data_manager.py (Important)
+### 7.2 data_manager.py ✅ COMPLETED
 
 **Source:** `archive/Adafruit_pitft/main.py` (CSV writing and file I/O logic)
 
-**Requirements:**
+**Status:** Completed 2025-12-03
 
-* Create `data/data_manager.py`
-* Implement DataManager class with background thread
-* Process save requests from queue
-* CSV file management (daily files, headers)
-* Matplotlib plot generation and saving
-* Thread-safe file I/O
-* Add full Doxygen documentation
+**Implementation:**
+
+* ✅ Created `data/data_manager.py` with DataManager class
+* ✅ Background thread processes save requests from queue
+* ✅ Daily folder organization (`DATA_DIR/YYYY-MM-DD/`)
+* ✅ CSV file with headers including wavelengths as columns
+* ✅ Matplotlib plot generation (PNG) for RAW and REFLECTANCE spectra
+* ✅ Saves raw intensities alongside reflectance data (RAW_REFLECTANCE type)
+* ✅ Thread-safe file I/O with queue-based communication
+* ✅ Full Doxygen documentation
 
 ## 8. Refactoring Achievements
 
@@ -740,6 +745,143 @@ spectro_screen.exit()
    * **File**: `ui/spectrometer_screen.py:334, 344`
    * **Benefit**: Thread now properly pauses during review and always provides fresh data representative of current spectrometer position
 
+### ✅ Phase 3 Complete: Data Storage & Save Workflow
+
+**Completed 2025-12-03:**
+
+1. ✅ Created data management module (`data/data_manager.py`)
+   * DataManager class with background thread for file I/O
+   * Queue-based save request processing
+   * Daily folder organization (`~/pysb-app/spectra_data/YYYY-MM-DD/`)
+   * CSV file with wavelengths as column headers
+   * Matplotlib plot generation for RAW and REFLECTANCE spectra
+   * Automatic raw intensity saving alongside reflectance (RAW_REFLECTANCE type)
+   * Daily scan counter with persistence across sessions
+   * Full Doxygen documentation
+
+2. ✅ Extended SpectrometerResult dataclass
+   * Added optional `raw_intensities` field for reflectance mode
+   * Controller populates raw intensities when calculating reflectance
+   * Enables saving both reflectance and raw target data
+
+3. ✅ Implemented save workflow in spectrometer_screen.py
+   * `_save_frozen_data()` creates SaveRequest with all capture metadata
+   * Sends to data_manager_save_queue for async file I/O
+   * Stores raw intensities for reflectance mode saves
+   * Tracks scans_to_average in frozen data
+
+4. ✅ Integrated DataManager into main.py
+   * Thread starts on application launch
+   * Graceful shutdown on application exit
+   * Queue-based communication with spectrometer screen
+
+**CSV Format:**
+
+```text
+timestamp_utc, spectra_type, lens_type, integration_time_ms, scans_to_average, temperature_c, [wavelengths...]
+2025-12-03T10:30:00Z, RAW, FIBER, 1000, 5, , 400.12, 400.24, ...
+```
+
+**File Organization:**
+
+```text
+~/pysb-app/spectra_data/
+└── 2025-12-03/
+    ├── 2025-12-03_spectra_log.csv
+    ├── spectrum_RAW_FIBER_2025-12-03-103000.png
+    └── spectrum_REFLECTANCE_FIBER_2025-12-03-104500.png
+```
+
+**Key Features:**
+
+* Lens type defaults to FIBER (original used variable lens types)
+* Scans to average now included in CSV (was not used in original)
+* Temperature column reserved for future temp_sensor integration
+* Raw target intensities saved with RAW_REFLECTANCE type when in reflectance mode
+* Plot generation only for OOI scans (RAW and REFLECTANCE), not for references
+
+### ✅ Phase 4 Complete: Calibration Workflow
+
+**Completed 2025-12-03:**
+
+1. ✅ New screen states for calibration workflow
+   * `STATE_CALIBRATION_MENU` - Select calibration type
+   * `STATE_LIVE_DARK_REF` - Live view for dark reference capture
+   * `STATE_LIVE_WHITE_REF` - Live view for white reference capture
+   * `STATE_FROZEN_DARK_REF` - Frozen dark reference for save/discard
+   * `STATE_FROZEN_WHITE_REF` - Frozen white reference for save/discard
+
+2. ✅ Y-axis scale persistence
+   * Store Y-axis scale when entering calibration menu
+   * Restore Y-axis scale when returning to live view
+   * Auto-rescale on first scan in reference capture mode
+
+3. ✅ Calibration menu implementation
+   * Navigate with X/Y buttons (up/down)
+   * Select with A button
+   * Options: Dark Reference, White Reference, Auto Integration (placeholder)
+   * Shows current reference status (OK/Not Set)
+
+4. ✅ Reference capture live feed
+   * Spectrometer starts fresh session when entering reference capture
+   * Shows live feed of spectrometer with averaging
+   * User can rescale Y-axis during capture
+   * First scan triggers automatic Y-axis rescale
+
+5. ✅ Freeze/Save/Discard for references
+   * A button freezes current averaged scan
+   * Frozen view shows "DARK REVIEW" or "WHITE REVIEW" status
+   * A button saves to CSV and stores reference in controller
+   * B button discards and returns to live reference capture with fresh scan
+
+6. ✅ Reference saves
+   * Saved to CSV with spectra_type DARK or WHITE
+   * No PNG plot generation for calibration scans
+   * Reference stored in controller for reflectance calculations
+
+**Calibration Workflow:**
+
+```text
+Live View (RAW/REFLECTANCE)
+    │
+    ├── [X] Enter Calibration Menu
+    │         ├── Spectrometer stops
+    │         └── Y-axis scale stored
+    │
+    ▼
+Calibration Menu
+    │
+    ├── [X/Y] Navigate options
+    ├── [A] Select Dark/White Reference
+    │         ├── Spectrometer starts fresh session
+    │         ├── Y-axis auto-rescales on first scan
+    │         └── Live feed displayed
+    │
+    └── [B] Return to Live View
+              └── Y-axis scale restored
+    │
+    ▼
+Live Dark/White Reference
+    │
+    ├── [Y] Rescale Y-axis
+    ├── [A] Freeze for capture
+    │         └── Spectrometer stops
+    │
+    └── [B] Return to Calibration Menu
+    │
+    ▼
+Frozen Dark/White Reference
+    │
+    ├── [A] Save
+    │         ├── Save to CSV (no PNG)
+    │         ├── Store in controller
+    │         └── Return to Live View
+    │
+    └── [B] Discard
+              ├── Spectrometer restarts
+              └── Return to Live Reference Capture
+```
+
 **Benefits Achieved:**
 
 * No circular dependencies - all modules are now standalone
@@ -752,47 +894,62 @@ spectro_screen.exit()
 
 ## 9. Next Steps (Remaining Work)
 
-### Phase 3: Data Management (High Priority)
+### Phase 3: Data Management ✅ COMPLETE
 
-The application is now fully functional for live data viewing. The remaining work is primarily for data persistence:
+See Section 8 "Phase 3 Complete" for full implementation details.
 
-1. **Create data_manager.py** - Background thread for saving spectral data
-   * Implement DataManager class with save queue processing
-   * CSV file writing with daily file rotation
-   * Matplotlib plot generation and saving to PNG
-   * Thread-safe file I/O operations
-   * Add full Doxygen documentation
-   * **Status**: Not started
+**Summary:**
 
-2. **Implement save functionality in spectrometer_screen.py**
-   * Create SaveRequest packets from frozen data
-   * Send to data_manager_save_queue when user presses ENTER on frozen plot
-   * Show save confirmation feedback
-   * **Status**: Placeholder exists, needs implementation
+* ✅ DataManager class with background thread
+* ✅ CSV file writing with daily folders
+* ✅ Matplotlib plot generation
+* ✅ Save workflow in spectrometer_screen.py
+* ✅ Integration with main.py
 
-3. **Test data saving workflow**
-   * Verify CSV format matches requirements
-   * Test plot generation
-   * Verify file permissions and paths
-   * **Status**: Pending implementation
+### Phase 4: Calibration & Reflectance ✅ COMPLETE
 
-### Phase 4: Optional Enhancements
+See Section 8 "Phase 4 Complete" for full implementation details.
+
+**Summary:**
+
+* ✅ Calibration menu (Dark/White/Auto-Integration selection)
+* ✅ Live feed for reference capture with fresh scan guarantee
+* ✅ Auto-rescale Y-axis on first scan in reference mode
+* ✅ Freeze/Save/Discard workflow for references
+* ✅ Y-axis scale persistence across calibration
+
+### Phase 5: Reflectance Testing & Auto-Integration (Next Priority)
+
+1. **Reflectance Mode End-to-End Testing**
+   * Verify reflectance calculation: (Raw - Dark) / (White - Dark)
+   * Test saving both reflectance and raw target data
+   * Verify plot generation for reflectance spectra
+   * **Status**: Controller calculates, needs end-to-end testing
+
+2. **Auto-Integration Feature**
+   * Implement algorithm from config.AUTO_INTEGRATION
+   * Auto-adjust integration time for optimal signal (80-95% saturation)
+   * Add to calibration menu (currently placeholder)
+   * **Status**: Config exists, menu placeholder exists, not implemented
+
+### Phase 6: Optional Enhancements
 
 1. **Create temp_sensor.py** - Temperature monitoring (optional feature)
    * Implement TempSensorInfo class with background thread
    * MCP9808 sensor via SMBus2
    * Display temperature in menu or status bar
+   * Include temperature in CSV saves
    * **Status**: Not started (low priority)
 
-2. **Add auto-integration feature**
-   * Implement algorithm from config.AUTO_INTEGRATION
-   * Auto-adjust integration time for optimal signal
-   * **Status**: Config exists, not implemented
-
-3. **Enhanced error handling**
+2. **Enhanced error handling**
    * More detailed error messages
    * Recovery strategies for hardware failures
    * **Status**: Basic error handling in place
+
+3. **Save confirmation feedback**
+   * Visual feedback when save completes
+   * Error indication if save fails
+   * **Status**: Not implemented
 
 ## 10. Development Guidelines Reminder
 
@@ -820,8 +977,14 @@ Current Component Status:
 * [x] Linter compliance (verified with automatic formatting)
 * [x] Live spectrometer plotting functional
 * [x] Button handler startup reliability
-* [ ] Data saving to CSV (pending implementation)
-* [ ] Matplotlib plot generation (pending implementation)
+* [x] Data saving to CSV (implemented 2025-12-03)
+* [x] Matplotlib plot generation (implemented 2025-12-03)
+* [x] Dark/white reference capture workflow (implemented 2025-12-03)
+* [x] Calibration menu navigation
+* [x] Reference freeze/save/discard workflow
+* [x] Y-axis scale persistence across calibration
+* [ ] Reflectance mode end-to-end testing
+* [ ] Auto-integration algorithm
 
 ---
 

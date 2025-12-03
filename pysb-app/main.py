@@ -2,8 +2,6 @@
 
 import threading
 from dataclasses import dataclass
-import numpy as np
-import datetime
 import queue
 import time
 import os
@@ -22,8 +20,7 @@ from ui import (
     display_utils,
     spectrometer_screen,
 )
-
-# from data import data_manager
+from data import data_manager
 
 # Disable audio driver
 os.environ["SDL_AUDIODRIVER"] = "dummy"
@@ -59,24 +56,6 @@ class SpectrometerSettings:
     integration_time_ms: int = config.SPECTROMETER.DEFAULT_INTEGRATION_TIME_MS
     collection_mode: str = config.MODES.DEFAULT_COLLECTION_MODE
     scans_to_average: int = config.SPECTROMETER.DEFAULT_SCANS_TO_AVERAGE
-
-
-@dataclass
-class CaptureResult:
-    """Data packet sent FROM the Spectrometer thread TO the main UI thread."""
-
-    wavelengths: np.ndarray
-    intensities: np.ndarray
-    settings: SpectrometerSettings
-    timestamp: datetime.datetime
-
-
-@dataclass
-class SaveRequest:
-    """Data packet sent FROM the main UI thread TO the Data Manager thread."""
-
-    result_data: CaptureResult
-    spectra_type: str  # e.g., "RAW", "REFLECTANCE", "DARK", "WHITE"
 
 
 # ==============================================================================
@@ -170,7 +149,10 @@ def main():
         request_queue=spectrometer_request_queue,
         result_queue=spectrometer_result_queue,
     )
-    # data_manager_inst = data_manager.DataManager(shutdown_flag, data_manager_save_queue)
+    data_manager_inst = data_manager.DataManager(
+        shutdown_flag=shutdown_flag,
+        save_queue=data_manager_save_queue,
+    )
 
     # --- Create UI Screen Instances ---
     menu_screen = menu_system.MenuSystem(
@@ -190,7 +172,7 @@ def main():
     network_info_inst.start()
     # temp_sensor_inst.start()
     spec_controller_inst.start()
-    # data_manager_inst.start()
+    data_manager_inst.start()
 
     # --- Main Application Logic ---
     app_state = "MENU"  # Initial state
@@ -272,7 +254,7 @@ def main():
         button_handler_inst.cleanup()
         # temp_sensor_inst.stop()
         spec_controller_inst.stop()
-        # data_manager_inst.stop()
+        data_manager_inst.stop()
         pygame.quit()
         print("Application finished.")
 
