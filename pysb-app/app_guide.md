@@ -7,7 +7,7 @@ This document provides a technical overview of the PySB-App, a Python-based spec
 
 ---
 
-## AI Coding Guidelines (Strictly Enforced)
+## Coding Guidelines (Strictly Enforced)
 
 **I. Core Principles (Safety & Simplicity):**
 
