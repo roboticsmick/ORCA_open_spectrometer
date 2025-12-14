@@ -66,6 +66,8 @@ def draw_image_centered(screen, image_path, scale_dims=None, fallback_text=""):
             draw_text(screen, fallback_text, font, (255, 255, 255), screen.get_rect())
         return False
 
+_fb_write_count = 0  # Track framebuffer writes for debugging
+
 def update_display(screen):
     """!
     @brief Updates the physical display based on hardware configuration.
@@ -75,6 +77,7 @@ def update_display(screen):
     @param screen The pygame.Surface to render to the display.
     @return None
     """
+    global _fb_write_count
     assert screen is not None, "Screen surface cannot be None"
 
     if config.HARDWARE["USE_ADAFRUIT_PITFT"]:
@@ -94,6 +97,9 @@ def update_display(screen):
             # Write to framebuffer device
             with open("/dev/fb1", "wb") as fb:
                 fb.write(rgb565_data)
+            _fb_write_count += 1
+            if _fb_write_count <= 3:  # Only print first few writes
+                print(f"Framebuffer write #{_fb_write_count} completed ({len(rgb565_data)} bytes)")
         except Exception as e:
             print(f"ERROR: Failed to update Adafruit PiTFT framebuffer: {e}")
     else:

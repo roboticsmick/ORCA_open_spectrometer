@@ -2,8 +2,8 @@
 
 This document provides a technical overview of the PySB-App, a Python-based spectrometer application designed for a Raspberry Pi with a touchscreen interface.
 
-**Last Updated:** 2025-12-03
-**Refactoring Status:** Phase 4 Complete (Calibration Workflow) ✅
+**Last Updated:** 2025-12-14
+**Refactoring Status:** Phase 5 Complete (Reflectance Mode & Scan Tracking) ✅
 
 ---
 
@@ -570,18 +570,42 @@ Live spectrometer view screen for displaying spectral plots in real-time at ~30 
 * `STATE_CAPTURE_DARK_REF`: Capturing dark reference (cover sensor)
 * `STATE_CAPTURE_WHITE_REF`: Capturing white reference (point at white target)
 
-**Button Controls (Physical Button → Logical Name):**
+**Button Controls by State:**
 
-* **A (ENTER)**: Freeze/unfreeze plot, save frozen data, or confirm capture
-* **B (BACK)**: Return to menu, discard frozen data, or cancel capture
+**Live View (Mode: LIVE):**
+
+* **A (ENTER)**: Freeze current spectrum for capture
+* **X (UP)**: Enter calibration menu
+* **Y (DOWN)**: Rescale Y-axis based on current data
+* **B (BACK)**: Return to main menu
+* Hint: `A:Freeze | X:Calib | Y:Rescale | B:Menu`
+
+**Calibration Menu:**
+
+* **A (ENTER)**: Start white reference capture
 * **X (UP)**: Start dark reference capture
-* **Y (DOWN)**: Rescale Y-axis based on current data (in live view and white setup)
+* **Y (DOWN)**: Start auto-integration (placeholder)
+* **B (BACK)**: Return to live view
+* Hint: `A:White | X:Dark | Y:Auto | B:Back`
+
+**Dark/White Reference Live Capture:**
+
+* **A (ENTER)**: Freeze current spectrum
+* **Y (DOWN)**: Rescale Y-axis
+* **B (BACK)**: Return to calibration menu
+* Hint: `Cover sensor | A:Capture | Y:Rescale | B:Back` (dark)
+* Hint: `Point at white | A:Capture | Y:Rescale | B:Back` (white)
+
+**Frozen View (capture review):**
+
+* **A (ENTER)**: Save frozen data
+* **B (BACK)**: Discard and return to live view
 
 **On-Screen Display:**
 
 * **Top Left**: Collection mode, integration time, scan averaging (e.g., "RAW | 1000ms | Avg:10")
-* **Top Right**: Current screen state mode (e.g., "Mode: LIVE", "Mode: REVIEW", "Mode: DARK SETUP")
-* **Bottom Center**: Context-sensitive hint text (e.g., "A:Freeze | X:Dark | Y:Rescale | B:Menu")
+* **Top Right**: Current screen state mode (e.g., "Mode: LIVE", "Mode: REVIEW", "Mode: DARK REF")
+* **Bottom Center**: Context-sensitive hint text
 
 **Y-Axis Scaling:**
 
@@ -745,6 +769,28 @@ spectro_screen.exit()
    * **File**: `ui/spectrometer_screen.py:334, 344`
    * **Benefit**: Thread now properly pauses during review and always provides fresh data representative of current spectrometer position
 
+6. **Reflectance Clipping Too Aggressive (spectrometer_controller.py)** ✅ **FIXED 2025-12-14**
+   * **Problem**: Reflectance values were clipped to [0.0, 1.0] range
+   * **Symptom**: Saved reflectance data capped at 1.0, losing legitimate high values
+   * **Solution**: Changed `np.clip(reflectance, 0.0, 1.0)` to `np.maximum(reflectance, 0.0)`
+   * **File**: `hardware/spectrometer_controller.py:717`
+   * **Benefit**: Values > 1.0 now preserved (valid for fluorescence, specular reflection, etc.)
+
+7. **Reference Captures Using Reflectance Mode (spectrometer_screen.py)** ✅ **FIXED 2025-12-14**
+   * **Problem**: When in REFLECTANCE mode, dark/white reference captures were showing reflectance-processed data instead of raw sensor data
+   * **Symptom**: White reference live feed and frozen data showed clipped/processed values, not raw ADC counts
+   * **Solution**: Added `CMD_SET_COLLECTION_MODE` with `MODE_RAW` in `_start_live_dark_reference()` and `_start_live_white_reference()`, stored original mode in `_stored_collection_mode`, restored mode in `_exit_calibration_to_live_view()`
+   * **Files**: `ui/spectrometer_screen.py:587-639, 679-722`
+   * **Benefit**: References now always capture raw sensor data, which is correct for the reflectance formula
+
+8. **Auto-Integration Not Updating Controller (spectrometer_screen.py)** ✅ **FIXED 2025-12-14**
+   * **Problem**: Auto-integration calculated new integration time but controller kept using old value
+   * **Symptom**: After auto-integration completed and applied (e.g., 6000ms), live view showed old integration time (e.g., 1000ms)
+   * **Root Cause**: `_apply_auto_integration_result()` updated `self.settings.integration_time_ms` but did NOT send `CMD_UPDATE_SETTINGS` to the controller. The controller has its own internal `_integration_time_ms` variable.
+   * **Solution**: Added `CMD_UPDATE_SETTINGS` command in `_apply_auto_integration_result()` to sync the new integration time to the controller
+   * **File**: `ui/spectrometer_screen.py:1292-1368`
+   * **Additional Fix**: Also invalidate dark/white references when auto-integration changes integration time, since references captured at a different integration time are not valid for reflectance calculations
+
 ### ✅ Phase 3 Complete: Data Storage & Save Workflow
 
 **Completed 2025-12-03:**
@@ -817,10 +863,8 @@ timestamp_utc, spectra_type, lens_type, integration_time_ms, scans_to_average, t
    * Auto-rescale on first scan in reference capture mode
 
 3. ✅ Calibration menu implementation
-   * Navigate with X/Y buttons (up/down)
-   * Select with A button
-   * Options: Dark Reference, White Reference, Auto Integration (placeholder)
-   * Shows current reference status (OK/Not Set)
+   * Direct button mapping: A=White, X=Dark, Y=Auto, B=Back
+   * Shows button options and current reference status (OK/Not Set)
 
 4. ✅ Reference capture live feed
    * Spectrometer starts fresh session when entering reference capture
@@ -843,6 +887,7 @@ timestamp_utc, spectra_type, lens_type, integration_time_ms, scans_to_average, t
 
 ```text
 Live View (RAW/REFLECTANCE)
+    │  Hint: "A:Freeze | X:Calib | Y:Rescale | B:Menu"
     │
     ├── [X] Enter Calibration Menu
     │         ├── Spectrometer stops
@@ -850,9 +895,11 @@ Live View (RAW/REFLECTANCE)
     │
     ▼
 Calibration Menu
+    │  Hint: "A:White | X:Dark | Y:Auto | B:Back"
     │
-    ├── [X/Y] Navigate options
-    ├── [A] Select Dark/White Reference
+    ├── [A] Start White Reference capture
+    ├── [X] Start Dark Reference capture
+    ├── [Y] Start Auto-Integration (placeholder)
     │         ├── Spectrometer starts fresh session
     │         ├── Y-axis auto-rescales on first scan
     │         └── Live feed displayed
@@ -862,6 +909,8 @@ Calibration Menu
     │
     ▼
 Live Dark/White Reference
+    │  Hint: "Cover sensor | A:Capture | Y:Rescale | B:Back" (dark)
+    │  Hint: "Point at white | A:Capture | Y:Rescale | B:Back" (white)
     │
     ├── [Y] Rescale Y-axis
     ├── [A] Freeze for capture
@@ -871,6 +920,7 @@ Live Dark/White Reference
     │
     ▼
 Frozen Dark/White Reference
+    │  Hint: "A:Save Dark/White Ref | B:Discard"
     │
     ├── [A] Save
     │         ├── Save to CSV (no PNG)
@@ -918,21 +968,186 @@ See Section 8 "Phase 4 Complete" for full implementation details.
 * ✅ Freeze/Save/Discard workflow for references
 * ✅ Y-axis scale persistence across calibration
 
-### Phase 5: Reflectance Testing & Auto-Integration (Next Priority)
+### Phase 5: Reflectance Mode & Scan Tracking ✅ COMPLETE
 
-1. **Reflectance Mode End-to-End Testing**
-   * Verify reflectance calculation: (Raw - Dark) / (White - Dark)
-   * Test saving both reflectance and raw target data
-   * Verify plot generation for reflectance spectra
-   * **Status**: Controller calculates, needs end-to-end testing
+**Reflectance Mode Implementation (2025-12-14):**
 
-2. **Auto-Integration Feature**
-   * Implement algorithm from config.AUTO_INTEGRATION
-   * Auto-adjust integration time for optimal signal (80-95% saturation)
-   * Add to calibration menu (currently placeholder)
-   * **Status**: Config exists, menu placeholder exists, not implemented
+1. **Reference Validation**
 
-### Phase 6: Optional Enhancements
+   * Dark and white references must exist before REFLECTANCE mode starts
+   * References must have matching integration times with current settings
+   * Validation checks: existence + integration time match
+   * If invalid: spectrometer does NOT start, warning displayed
+
+2. **Reference Integration Time Tracking**
+
+   * `_dark_ref_integration_ms` - stored when dark reference is saved
+   * `_white_ref_integration_ms` - stored when white reference is saved
+   * Validation compares against `settings.integration_time_ms`
+
+3. **Reflectance Calculation**
+
+   * Formula: `Reflectance = (Raw - Dark) / (White - Dark)`
+   * Division-by-zero protection using `config.DIVISION_EPSILON`
+   * Only negative values clipped to 0.0 (no upper bound)
+   * Values > 1.0 are valid (fluorescence, specular reflection, etc.)
+   * Calculation performed in SpectrometerController thread
+
+4. **Reference Capture Mode**
+
+   * Dark/White reference captures ALWAYS use RAW mode
+   * Collection mode temporarily set to RAW when entering reference capture
+   * Original collection mode stored in `_stored_collection_mode`
+   * Mode restored when exiting calibration back to live view
+   * Ensures references contain raw sensor data, not processed reflectance
+
+5. **Invalid References Warning Screen**
+
+   * Title: "CALIBRATE REQUIRED" (white, centered)
+   * Shows simplified reference status:
+     * "Dark Reference: Not set" (white) or "Dark Reference: Complete" (yellow)
+     * "White Reference: Not set" (white) or "White Reference: Complete" (yellow)
+   * Hint: "X: Calibrate | B: Menu"
+   * Only X and B buttons functional (A and Y disabled)
+
+**Session Scan Counter (2025-12-14):**
+
+1. **Session Scan Count**
+
+   * `_session_scan_count` - counts RAW and REFLECTANCE scans only
+   * Resets each app start (not daily)
+   * REFLECTANCE saves both RAW_REFLECTANCE and REFLECTANCE but counts as 1
+   * Calibration scans (DARK, WHITE) are NOT counted
+
+2. **Scans Since Last Calibration**
+
+   * `_scans_since_dark_ref` - resets to 0 when dark ref saved
+   * `_scans_since_white_ref` - resets to 0 when white ref saved
+   * `_scans_since_auto_integ` - resets to 0 when auto-integ completes
+   * Incremented on each RAW/REFLECTANCE save
+
+3. **Calibration Invalidation Rules**
+
+   * Integration time change → ALL calibrations invalidated
+   * Scans to average change → Dark/White refs invalidated (auto-integ unaffected)
+   * Checked on screen entry via `_check_and_handle_settings_changes()`
+
+4. **Status Bar Format**
+
+   ```text
+   RAW | INT:1000ms | AVG:1 | SCANS:0 | LIVE
+   REFLECT | INT:1000ms | AVG:10 | SCANS:5 | LIVE
+   ```
+
+**Calibration Menu Redesign (2025-12-14):**
+
+```text
+CALIBRATION MENU
+
+A: White Reference - Set/Not valid
+   Scans since last set: ##
+X: Dark Reference - Set/Not valid
+   Scans since last set: ##
+Y: Auto integration - Completed/Not complete
+   Integration time: ####ms
+   Scans since last set: ##
+
+A:White | X:Dark | Y:Auto | B:Back
+```
+
+### Phase 6: Auto-Integration ✅ COMPLETE
+
+**Completed 2025-12-14:**
+
+1. **Command & Result Extensions (spectrometer_controller.py)**
+   * Added `CMD_AUTO_INTEG_CAPTURE` command type
+   * Added `test_integration_us` parameter to `SpectrometerCommand`
+   * Added `peak_adc_value` and `test_integration_us` fields to `SpectrometerResult`
+   * Added `SPECTRA_TYPE_AUTO_INTEG` to config.MODES
+   * Implemented `_capture_for_auto_integration()` method:
+     * Captures single scan at specified integration time (no averaging)
+     * Returns result with peak ADC value for algorithm evaluation
+     * Uses RAW mode for accurate sensor readings
+
+2. **Auto-Integration States (spectrometer_screen.py)**
+   * `STATE_AUTO_INTEG_SETUP` - Setup screen with instructions
+   * `STATE_AUTO_INTEG_RUNNING` - Algorithm running iteratively
+   * `STATE_AUTO_INTEG_CONFIRM` - Confirm or discard result
+
+3. **Algorithm Implementation**
+   * **Proportional Control**: Adjusts integration time based on peak ADC vs target range
+   * **Target Range**: 80-95% of max ADC count (configurable in `config.AUTO_INTEGRATION`)
+   * **Oscillation Damping**: Detects direction reversals and applies damping factor
+   * **Minimum Adjustment**: Enforces minimum step size to prevent stalling
+   * **Convergence Detection**: Stops when no further adjustment possible
+   * **Hardware Limits**: Respects min/max integration time from device
+
+4. **Configuration Parameters (config.AUTO_INTEGRATION)**
+
+   ```python
+   TARGET_LOW_PERCENT = 80.0      # Lower bound of target saturation
+   TARGET_HIGH_PERCENT = 95.0     # Upper bound of target saturation
+   MAX_ITERATIONS = 20            # Maximum algorithm iterations
+   PROPORTIONAL_GAIN = 0.8        # Control loop gain
+   MIN_ADJUSTMENT_US = 50         # Minimum integration time step (µs)
+   OSCILLATION_DAMPING_FACTOR = 0.5  # Damping when direction reverses
+   ```
+
+5. **Algorithm Flow**
+
+   ```text
+   Start with current menu integration time
+   ↓
+   For each iteration (max 20):
+     1. Capture single scan at test integration time
+     2. Get peak ADC value from result
+     3. Check conditions:
+        - In target range (80-95%) → CONFIRM with "Target achieved"
+        - At min integ & saturated → CONFIRM with "At min, still saturated"
+        - At max integ & low → CONFIRM with "At max, still low"
+        - Max iterations reached → CONFIRM with "Max iterations"
+     4. Calculate new integration time:
+        - ratio = target_adc / peak_adc
+        - change = (ideal_next - current) * PROPORTIONAL_GAIN
+        - Apply oscillation damping if direction reversed
+        - Enforce minimum adjustment
+        - Clamp to hardware limits
+     5. Request next capture
+   ↓
+   Confirm screen shows result and proposed integration time
+   User accepts (A) or cancels (B)
+   ```
+
+6. **User Interface**
+   * **Setup Screen**: Instructions to aim at white reference, shows starting integration time and target range
+   * **Running Screen**: Shows iteration count, current test integration, last peak ADC, target range
+   * **Confirm Screen**: Shows frozen spectrum plot with proposed integration time
+   * **Hint Text**:
+     * Setup: `A:Start | B:Cancel`
+     * Running: `B:Cancel`
+     * Confirm: `A:Apply {ms}ms | B:Cancel`
+
+7. **Workflow from Calibration Menu**
+
+   ```text
+   Calibration Menu
+       ↓ [Y button]
+   Auto-Integration Setup
+       ↓ [A button]
+   Auto-Integration Running (iterates automatically)
+       ↓ (algorithm completes)
+   Auto-Integration Confirm
+       ↓ [A button]
+   Settings updated, return to Live View
+   ```
+
+8. **Integration with Settings**
+   * On apply: Updates `settings.integration_time_ms` with new value
+   * Marks `_auto_integ_completed = True`
+   * Resets `_scans_since_auto_integ = 0`
+   * Integration time change also invalidates dark/white references (existing behavior)
+
+### Phase 7: Optional Enhancements
 
 1. **Create temp_sensor.py** - Temperature monitoring (optional feature)
    * Implement TempSensorInfo class with background thread
@@ -983,8 +1198,21 @@ Current Component Status:
 * [x] Calibration menu navigation
 * [x] Reference freeze/save/discard workflow
 * [x] Y-axis scale persistence across calibration
-* [ ] Reflectance mode end-to-end testing
-* [ ] Auto-integration algorithm
+* [x] Reflectance mode reference validation (2025-12-14)
+* [x] Reflectance mode warning screen when refs invalid (2025-12-14)
+* [x] Reference integration time tracking (2025-12-14)
+* [x] Session scan counter (2025-12-14)
+* [x] Scans-since-calibration counters (2025-12-14)
+* [x] Calibration invalidation on settings change (2025-12-14)
+* [x] Status bar redesign with scan count (2025-12-14)
+* [x] Calibration menu redesign with status info (2025-12-14)
+* [x] Reflectance clipping fix - no upper bound (2025-12-14)
+* [x] Reference captures always use RAW mode (2025-12-14)
+* [x] Auto-integration algorithm (2025-12-14)
+* [x] Auto-integration updates controller integration time (2025-12-14)
+* [x] Auto-integration invalidates dark/white references (2025-12-14)
+* [ ] Reflectance mode live feed testing (needs hardware)
+* [ ] Auto-integration hardware testing (needs hardware)
 
 ---
 

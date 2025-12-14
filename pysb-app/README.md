@@ -153,9 +153,6 @@ pi@ada:~/pysb-app$ source pysb_venv/bin/activate
 (pysb_venv) pi@ada:~/pysb-app$ python3 main.py 
 ```
 
-
-
-
 ## Underwater Spectrometer Data Download Guide
 
 This guide explains how to download spectral data (CSV files and PNG images) from your Raspberry Pi-based underwater spectrometer to your computer.
@@ -467,7 +464,9 @@ file *.png
 ```
 
 #### 4. Network Configuration
+
 If you can't connect to the Pi:
+
 ```bash
 # Find Pi on network
 nmap -sn 192.168.1.0/24 | grep -B 2 -A 2 "Raspberry"

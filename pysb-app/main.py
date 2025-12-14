@@ -175,10 +175,13 @@ def main():
     data_manager_inst.start()
 
     # --- Main Application Logic ---
+    print("Entering main application logic...")
     app_state = "MENU"  # Initial state
     try:
         # --- Initial Startup Sequence ---
+        print("Showing splash screen...")
         splash_screen.show(screen, leak_detected_flag)
+        print("Splash screen done.")
 
         if leak_detected_flag.is_set():
             leak_warning.show(screen)
@@ -186,7 +189,9 @@ def main():
             shutdown_flag.set()
 
         if not shutdown_flag.is_set():
+            print("Showing terms screen...")
             terms_screen.show(screen, button_handler_inst, leak_detected_flag)
+            print("Terms screen done.")
 
             if leak_detected_flag.is_set():
                 leak_warning.show(screen)
@@ -194,6 +199,7 @@ def main():
                 shutdown_flag.set()
 
         # --- Main Application Loop ---
+        print("Entering main loop...")
         while not shutdown_flag.is_set():
             # --- Event Handling ---
             button_handler_inst.check_pygame_events()
