@@ -476,9 +476,9 @@ class MenuSystem:
                 # Show which field is being edited
                 hint = f"A: Next/Save | B: Cancel | X/Y: Edit {self._editing_field.upper()}"
             else:
-                hint = "A: Save | B: Cancel | X: UP | Y: DOWN"
+                hint = "A: Save | B: Cancel | X: Up | Y: Down"
         else:
-            hint = "A: Select/Edit | X: UP | Y: DOWN"
+            hint = "A: Select/Edit | X: Up | Y: Down"
 
         hint_surface = self.font_info.render(hint, True, config.COLORS.YELLOW)
         hint_rect = hint_surface.get_rect(
@@ -576,9 +576,9 @@ class MenuSystem:
                     elif item["type"] in ["numeric", "choice"]:
                         # For numeric/choice: box around entire value
                         value_rect = pygame.Rect(
-                            value_x - 1,
+                            value_x - 2,
                             y_pos,
-                            value_surface.get_width() + 1,
+                            value_surface.get_width() + 2,
                             value_surface.get_height(),
                         )
                         pygame.draw.rect(self.screen, config.COLORS.BLUE, value_rect, 1)

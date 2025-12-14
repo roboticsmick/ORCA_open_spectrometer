@@ -209,6 +209,7 @@ class SpectrometerScreen:
         # Calibration menu state
         self._calib_menu_index: int = 0
         self._first_scan_in_ref_capture: bool = False
+        self._auto_rescale_on_next_scan: bool = False  # Trigger rescale after auto-integ
 
         # Stored collection mode for reference capture
         # When capturing references, we temporarily switch to RAW mode
@@ -1340,6 +1341,10 @@ class SpectrometerScreen:
             self._auto_integ_integration_ms = new_integ_ms
             self._scans_since_auto_integ = 0
 
+            # Trigger auto-rescale on first scan back in live view
+            # Integration time changed so signal levels will be different
+            self._auto_rescale_on_next_scan = True
+
             print(
                 f"SpectrometerScreen: New integration time: "
                 f"{new_integ_ms} ms"
@@ -1528,6 +1533,12 @@ class SpectrometerScreen:
                 self._first_scan_in_ref_capture = False
                 self._rescale_y_axis()
                 print("SpectrometerScreen: Auto-rescaled Y-axis for reference capture")
+
+            # Auto-rescale after auto-integration (integration time changed)
+            if self._auto_rescale_on_next_scan and self._state == self.STATE_LIVE_VIEW:
+                self._auto_rescale_on_next_scan = False
+                self._rescale_y_axis()
+                print("SpectrometerScreen: Auto-rescaled Y-axis after auto-integration")
 
             # Update spectrum
             self.renderer.update_spectrum(

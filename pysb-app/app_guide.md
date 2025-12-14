@@ -788,8 +788,10 @@ spectro_screen.exit()
    * **Symptom**: After auto-integration completed and applied (e.g., 6000ms), live view showed old integration time (e.g., 1000ms)
    * **Root Cause**: `_apply_auto_integration_result()` updated `self.settings.integration_time_ms` but did NOT send `CMD_UPDATE_SETTINGS` to the controller. The controller has its own internal `_integration_time_ms` variable.
    * **Solution**: Added `CMD_UPDATE_SETTINGS` command in `_apply_auto_integration_result()` to sync the new integration time to the controller
-   * **File**: `ui/spectrometer_screen.py:1292-1368`
-   * **Additional Fix**: Also invalidate dark/white references when auto-integration changes integration time, since references captured at a different integration time are not valid for reflectance calculations
+   * **File**: `ui/spectrometer_screen.py:1292-1380`
+   * **Additional Fixes**:
+     * Invalidate dark/white references when auto-integration changes integration time (references at different integration time not valid for reflectance)
+     * Added `_auto_rescale_on_next_scan` flag to trigger Y-axis rescale on first scan after auto-integration (signal levels change with integration time in RAW mode)
 
 ### ✅ Phase 3 Complete: Data Storage & Save Workflow
 
@@ -1211,6 +1213,7 @@ Current Component Status:
 * [x] Auto-integration algorithm (2025-12-14)
 * [x] Auto-integration updates controller integration time (2025-12-14)
 * [x] Auto-integration invalidates dark/white references (2025-12-14)
+* [x] Auto-integration triggers Y-axis rescale on first scan (2025-12-14)
 * [ ] Reflectance mode live feed testing (needs hardware)
 * [ ] Auto-integration hardware testing (needs hardware)
 

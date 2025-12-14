@@ -36,8 +36,10 @@ plt = None
 
 try:
     import matplotlib
+
     matplotlib.use("Agg")  # Non-GUI backend for headless rendering
     import matplotlib.pyplot as plt
+
     print("DataManager: Matplotlib loaded successfully (Agg backend).")
 except ImportError as e:
     print(f"WARNING: Matplotlib not available: {e}")
@@ -235,7 +237,16 @@ class DataManager:
         if csv_success:
             print(f"DataManager: Saved {request.spectra_type} to CSV successfully")
 
+            # If reflectance mode, also save the raw target intensities to CSV
+            # Do this BEFORE plot generation so both CSVs are saved quickly
+            if (
+                request.spectra_type == config.MODES.SPECTRA_TYPE_REFLECTANCE
+                and request.raw_intensities_for_reflectance is not None
+            ):
+                self._save_raw_for_reflectance(request)
+
             # Generate plot only for OOI scans (RAW or REFLECTANCE)
+            # Plot generation is slower (matplotlib), so do it last
             should_save_plot = request.spectra_type in [
                 config.MODES.SPECTRA_TYPE_RAW,
                 config.MODES.SPECTRA_TYPE_REFLECTANCE,
@@ -243,13 +254,6 @@ class DataManager:
 
             if should_save_plot and plt is not None:
                 self._save_plot(request)
-
-            # If reflectance mode, also save the raw target intensities
-            if (
-                request.spectra_type == config.MODES.SPECTRA_TYPE_REFLECTANCE
-                and request.raw_intensities_for_reflectance is not None
-            ):
-                self._save_raw_for_reflectance(request)
         else:
             print(f"ERROR: Failed to save {request.spectra_type} to CSV")
 
@@ -349,7 +353,9 @@ class DataManager:
                         "scans_to_average",
                         "temperature_c",
                     ]
-                    header_row.extend([f"{float(wl):.2f}" for wl in request.wavelengths])
+                    header_row.extend(
+                        [f"{float(wl):.2f}" for wl in request.wavelengths]
+                    )
                     writer.writerow(header_row)
 
                 # Write data row

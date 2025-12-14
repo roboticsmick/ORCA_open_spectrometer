@@ -80,8 +80,8 @@ class COLORS:
 
 class FONT_SIZES:
     TITLE = 22
-    MENU_ITEM = 16  # Original MENU_FONT_SIZE
-    MENU_VALUE = 16  # Original MENU_FONT_SIZE
+    MENU_ITEM = 16
+    MENU_VALUE = 16
     HINT = 16
     DISCLAIMER = 14
     INFO = 14
