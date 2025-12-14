@@ -3,7 +3,7 @@
 This document provides a technical overview of the PySB-App, a Python-based spectrometer application designed for a Raspberry Pi with a touchscreen interface.
 
 **Last Updated:** 2025-12-14
-**Refactoring Status:** Phase 5 Complete (Reflectance Mode & Scan Tracking) ✅
+**Refactoring Status:** Phase 9 Complete (Temperature Sensor & Fan Control) ✅
 
 ---
 
@@ -93,7 +93,7 @@ pysb-app/
 │   ├── button_handler.py        # ✅ GPIO/Pygame input (⚠️ needs Doxygen docs)
 │   ├── leak_sensor.py           # ✅ Leak detection thread (has Doxygen docs)
 │   ├── network_info.py          # ✅ Network monitoring thread (has Doxygen docs)
-│   ├── temp_sensor.py           # ❌ TODO: Temperature sensor thread
+│   ├── temp_sensor.py           # ✅ Temperature sensor & fan control thread (has Doxygen docs)
 │   └── spectrometer_controller.py # ✅ Spectrometer control thread (has Doxygen docs)
 │
 ├── ui/                          # ✅ User interface components
@@ -250,6 +250,12 @@ All static application-wide constants are stored in `config.py` to allow for eas
   * Y_AXIS_DEFAULT_MAX=1000.0
   * Y_AXIS_RESCALE_FACTOR=1.2
   * Y_AXIS_MIN_CEILING=100.0
+  * WAVELENGTH_RANGE_MIN_NM=400.0 (default minimum wavelength to display)
+  * WAVELENGTH_RANGE_MAX_NM=620.0 (default maximum wavelength to display)
+  * WAVELENGTH_EDIT_STEP_NM=20 (step size for menu adjustment)
+  * WAVELENGTH_EDIT_MIN_LIMIT_NM=340 (hardware minimum)
+  * WAVELENGTH_EDIT_MAX_LIMIT_NM=850 (hardware maximum)
+  * WAVELENGTH_EDIT_MIN_GAP_NM=40 (minimum gap between min and max)
 
 ### 3.11 Mode Definitions
 
@@ -367,7 +373,71 @@ Fetches WiFi SSID and IP address in a background thread to prevent UI blocking.
 * `get_wifi_name()`: Get cached WiFi SSID
 * `get_ip_address()`: Get cached IP address
 
-### 5.4 SpectrometerController (`hardware/spectrometer_controller.py`)
+### 5.4 TempSensorInfo (`hardware/temp_sensor.py`)
+
+**Status:** ✅ Functional with Doxygen documentation
+
+Manages MCP9808 temperature sensor readings and automatic fan control in a background thread.
+
+**Features:**
+
+* MCP9808 I2C temperature sensor support via Adafruit library
+* Automatic fan control based on configurable temperature threshold
+* MOSFET-controlled fan via GPIO pin (default: GPIO 4)
+* Thread-safe temperature and fan state access
+* Graceful degradation if sensor unavailable (fan still controllable)
+* Runtime threshold adjustment via menu
+
+**Fan Control Logic:**
+
+* Fan turns ON when temperature >= threshold
+* Default threshold is 0°C (fan always on when spectrometer starts)
+* Higher thresholds (e.g., 40°C) save power by only cooling when needed
+* Fan state preserved if temperature read fails
+
+**Configuration (config.py):**
+
+* `FAN_ENABLE_PIN`: GPIO pin for MOSFET gate control (default: 4)
+* `FAN_DEFAULT_THRESHOLD_C`: Default threshold temperature (default: 0)
+* `FAN_THRESHOLD_MIN_C`: Minimum threshold for menu (default: 0)
+* `FAN_THRESHOLD_MAX_C`: Maximum threshold for menu (default: 60)
+* `FAN_THRESHOLD_STEP_C`: Menu adjustment step size (default: 5)
+* `TEMP_UPDATE_INTERVAL_S`: Sensor polling interval (default: 10.0 seconds)
+
+**Dependency Injection:**
+
+* `shutdown_flag`: Threading event to signal thread termination
+
+**API:**
+
+* `start()`: Start the background temperature/fan control thread
+* `stop()`: Stop the thread and turn off fan, cleanup GPIO
+* `get_temperature_c()`: Get current temperature (float) or error string
+* `is_fan_enabled()`: Get current fan state (boolean)
+* `get_fan_threshold_c()`: Get current fan threshold (int)
+* `set_fan_threshold_c(threshold)`: Set new fan threshold (int)
+* `get_display_string()`: Get formatted string for menu display
+
+**Hardware Wiring:**
+
+```text
+Fan Red Wire    -> 5V through MOSFET drain
+Fan Black Wire  -> Ground
+Fan Yellow Wire -> Not connected (tachometer not used)
+MOSFET Gate     -> GPIO 4 (configurable)
+MCP9808 SDA     -> GPIO 2 (I2C data)
+MCP9808 SCL     -> GPIO 3 (I2C clock)
+MCP9808 VCC     -> 3.3V
+MCP9808 GND     -> Ground
+```
+
+**Library Path (Raspberry Pi):**
+
+```text
+/home/pi/pysb-app/lib/Adafruit_Python_MCP9808/MCP9808.py
+```
+
+### 5.5 SpectrometerController (`hardware/spectrometer_controller.py`)
 
 **Status:** ✅ Functional and tested with full Doxygen documentation
 
@@ -655,18 +725,23 @@ spectro_screen.exit()
 
 ## 7. Pending Components (To Be Migrated)
 
-### 7.1 temp_sensor.py (High Priority)
+### 7.1 temp_sensor.py ✅ COMPLETED
 
 **Source:** `archive/Adafruit_pitft/main.py` lines 752-863 (TempSensorInfo class)
 
-**Requirements:**
+**Status:** Completed 2025-12-14
 
-* Create `hardware/temp_sensor.py`
-* Implement TempSensorInfo class with background thread
-* Use dependency injection for `shutdown_flag`
-* Handle MCP9808 sensor via SMBus2
-* Provide thread-safe temperature getter
-* Add full Doxygen documentation
+**Implementation:**
+
+* ✅ Created `hardware/temp_sensor.py` with TempSensorInfo class
+* ✅ Background thread for temperature monitoring and fan control
+* ✅ MCP9808 sensor via Adafruit library
+* ✅ MOSFET-controlled fan with configurable threshold
+* ✅ Thread-safe temperature, fan state, and threshold access
+* ✅ Menu integration for fan threshold adjustment
+* ✅ Full Doxygen documentation
+
+See Section 5.4 for complete documentation.
 
 ### 7.2 data_manager.py ✅ COMPLETED
 
@@ -1149,14 +1224,116 @@ A:White | X:Dark | Y:Auto | B:Back
    * Resets `_scans_since_auto_integ = 0`
    * Integration time change also invalidates dark/white references (existing behavior)
 
-### Phase 7: Optional Enhancements
+### Phase 8: Plot Wavelength Range Menu ✅ COMPLETE
 
-1. **Create temp_sensor.py** - Temperature monitoring (optional feature)
-   * Implement TempSensorInfo class with background thread
-   * MCP9808 sensor via SMBus2
-   * Display temperature in menu or status bar
-   * Include temperature in CSV saves
-   * **Status**: Not started (low priority)
+**Completed 2025-12-14:**
+
+1. **Menu Item Implementation**
+   * New menu item type: `wavelength_range`
+   * Dual-field editing similar to datetime (min → max)
+   * Format displayed: `400nm - 620nm`
+   * Blue box highlights current field being edited
+
+2. **Configuration Constants (config.PLOTTING)**
+   * `WAVELENGTH_RANGE_MIN_NM` - Current minimum wavelength (runtime modifiable)
+   * `WAVELENGTH_RANGE_MAX_NM` - Current maximum wavelength (runtime modifiable)
+   * `WAVELENGTH_EDIT_STEP_NM = 20` - Adjustment step size
+   * `WAVELENGTH_EDIT_MIN_LIMIT_NM = 340` - Hardware lower bound
+   * `WAVELENGTH_EDIT_MAX_LIMIT_NM = 850` - Hardware upper bound
+   * `WAVELENGTH_EDIT_MIN_GAP_NM = 40` - Minimum gap between min and max
+
+3. **Editing Workflow**
+   * Press A to enter edit mode (starts with MIN field)
+   * Use X/Y to adjust value by ±20nm steps
+   * Press A to advance to MAX field
+   * Press A again to save and exit
+   * Press B at any time to cancel and restore original values
+
+4. **Validation Rules**
+   * MIN cannot go below 340nm (hardware limit)
+   * MAX cannot exceed 850nm (hardware limit)
+   * MIN must be at least 40nm less than MAX
+   * MAX must be at least 40nm greater than MIN
+
+5. **Display vs Save Behavior**
+   * Wavelength range ONLY affects plot display cropping
+   * Saved CSV files contain FULL wavelength spectrum
+   * Reflectance calculations use full wavelength arrays (no data quality impact)
+   * Scientists can filter noisy regions (e.g., >700nm) from display while preserving complete data
+
+6. **Technical Implementation**
+   * Menu modifies `config.PLOTTING.WAVELENGTH_RANGE_*_NM` at runtime
+   * `prepare_display_data()` in `plotting.py` reads config values automatically
+   * X-axis ticks auto-adjust using `np.linspace()` for any range
+   * No changes needed to plotting.py or spectrometer_screen.py
+
+**Files Modified:**
+
+* `config.py` - Added wavelength editing constants
+* `ui/menu_system.py` - Added `wavelength_range` menu item type with dual-field editing
+
+### Phase 9: Temperature Sensor & Fan Control ✅ COMPLETE
+
+**Completed 2025-12-14:**
+
+1. **TempSensorInfo Class (`hardware/temp_sensor.py`)**
+   * Background thread for temperature monitoring (10-second interval)
+   * MCP9808 I2C temperature sensor via Adafruit library
+   * MOSFET-controlled fan on GPIO 4
+   * Automatic fan activation when temp >= threshold
+   * Thread-safe access to temperature, fan state, threshold
+   * Graceful degradation if sensor unavailable
+
+2. **Fan Control Configuration (`config.py`)**
+   * `FAN_ENABLE_PIN = 4` - MOSFET gate GPIO pin
+   * `FAN_DEFAULT_THRESHOLD_C = 0` - Default: always on
+   * `FAN_THRESHOLD_MIN_C = 0` - Minimum threshold
+   * `FAN_THRESHOLD_MAX_C = 60` - Maximum threshold
+   * `FAN_THRESHOLD_STEP_C = 5` - Menu adjustment step
+
+3. **Menu Integration (`ui/menu_system.py`)**
+   * New `fan_threshold` menu item type
+   * Display format: `Fan: Threshold ##C (Current ##C)`
+   * Real-time temperature display from sensor
+   * Threshold adjustment with UP/DOWN buttons (±5°C steps)
+   * Fan threshold changes do not invalidate spectrometer references
+
+4. **Integration with main.py**
+   * TempSensorInfo instantiated with shutdown_flag
+   * Passed to MenuSystem for temperature display and fan control
+   * Background thread started/stopped with application lifecycle
+   * Fan turned off and GPIO cleaned up on shutdown
+
+**Fan Control Behavior:**
+
+```text
+Threshold = 0°C  → Fan always ON (default, maximum cooling)
+Threshold = 40°C → Fan ON when temp >= 40°C (power saving)
+Threshold = 60°C → Fan ON when temp >= 60°C (minimal cooling)
+```
+
+**Menu Display Examples:**
+
+```text
+Fan: Threshold 0C (Current 28C)    # Fan always on, current temp 28°C
+Fan: Threshold 40C (Current 35C)   # Fan off, waiting for 40°C
+Fan: Threshold 40C (Current 42C)   # Fan on, temp above threshold
+Fan: Threshold 0C (Temp: N/A)      # Fan on, sensor unavailable
+```
+
+**Files Modified:**
+
+* `hardware/temp_sensor.py` - New file with TempSensorInfo class
+* `config.py` - Added fan control settings
+* `ui/menu_system.py` - Added fan_threshold menu item type
+* `main.py` - Integrated TempSensorInfo
+
+### Phase 10: Optional Enhancements
+
+1. **Include temperature in CSV saves**
+   * Add temperature column to saved spectra data
+   * Pass TempSensorInfo to SpectrometerScreen
+   * **Status**: Not implemented
 
 2. **Enhanced error handling**
    * More detailed error messages
@@ -1214,8 +1391,18 @@ Current Component Status:
 * [x] Auto-integration updates controller integration time (2025-12-14)
 * [x] Auto-integration invalidates dark/white references (2025-12-14)
 * [x] Auto-integration triggers Y-axis rescale on first scan (2025-12-14)
+* [x] Plot wavelength range menu item (2025-12-14)
+* [x] Wavelength range dual-field editing (min/max) (2025-12-14)
+* [x] Wavelength range validation (limits and gap) (2025-12-14)
 * [ ] Reflectance mode live feed testing (needs hardware)
 * [ ] Auto-integration hardware testing (needs hardware)
+* [ ] Plot wavelength range hardware testing (needs hardware)
+* [x] Temperature sensor integration (2025-12-14)
+* [x] Fan control GPIO setup (2025-12-14)
+* [x] Fan threshold menu item (2025-12-14)
+* [ ] MCP9808 sensor hardware testing (needs hardware)
+* [ ] Fan MOSFET control hardware testing (needs hardware)
+* [ ] Fan threshold adjustment hardware testing (needs hardware)
 
 ---
 

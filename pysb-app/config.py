@@ -15,7 +15,7 @@ HARDWARE = {
     "USE_HALL_EFFECT_BUTTONS": True,
     "USE_LEAK_SENSOR": True,
     "USE_SPECTROMETER": True,
-    "USE_TEMP_SENSOR_IF_AVAILABLE": False,
+    "USE_TEMP_SENSOR_IF_AVAILABLE": True,
 }
 
 # --- System ---
@@ -31,6 +31,16 @@ HALL_EFFECT_PINS = {"UP": 20, "DOWN": 21, "ENTER": 19, "BACK": 12}
 
 LEAK_SENSOR_PIN = 26
 LEAK_SENSOR_CHECK_S = 1.0  # How often to check the leak sensor (seconds)
+
+# Fan control pin (MOSFET gate control)
+FAN_ENABLE_PIN = 4
+
+# Fan threshold settings
+# Default threshold of 0 means fan is always on when spectrometer starts
+FAN_DEFAULT_THRESHOLD_C = 0
+FAN_THRESHOLD_MIN_C = 0  # Minimum threshold (0 = always on)
+FAN_THRESHOLD_MAX_C = 60  # Maximum threshold
+FAN_THRESHOLD_STEP_C = 5  # Step size for menu adjustment
 
 # Button Logical Names (used internally)
 BTN_UP = "up"
@@ -168,6 +178,12 @@ class PLOTTING:
     WAVELENGTH_RANGE_MIN_NM = 400.0  # Minimum wavelength to display (nm)
     WAVELENGTH_RANGE_MAX_NM = 620.0  # Maximum wavelength to display (nm)
     TARGET_DISPLAY_POINTS = 300  # Number of points to display after decimation
+
+    # Wavelength range editing limits (for menu)
+    WAVELENGTH_EDIT_STEP_NM = 20  # Step size for wavelength range adjustment
+    WAVELENGTH_EDIT_MIN_LIMIT_NM = 340  # Minimum allowed wavelength (hardware limit)
+    WAVELENGTH_EDIT_MAX_LIMIT_NM = 850  # Maximum allowed wavelength (hardware limit)
+    WAVELENGTH_EDIT_MIN_GAP_NM = 40  # Minimum gap between min and max wavelength
 
 
 # --- MODES ---

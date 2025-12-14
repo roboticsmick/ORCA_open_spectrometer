@@ -21,14 +21,20 @@ class MenuSystem:
     FIELD_YEAR, FIELD_MONTH, FIELD_DAY = "year", "month", "day"
     FIELD_HOUR, FIELD_MINUTE = "hour", "minute"
 
+    # Field constants for wavelength range editing
+    FIELD_WL_MIN, FIELD_WL_MAX = "wl_min", "wl_max"
+
     ##
     # @brief Initializes the MenuSystem.
     # @param screen The Pygame surface to draw on.
     # @param button_handler The ButtonHandler instance for processing user input.
     # @param settings The SpectrometerSettings dataclass instance to modify.
     # @param network_info The NetworkInfo instance for displaying network status.
+    # @param temp_sensor Optional TempSensorInfo instance for temperature display and fan control.
     # @details Sets up fonts, menu structure, and initializes flags for reference captures.
-    def __init__(self, screen, button_handler, settings, network_info):
+    def __init__(
+        self, screen, button_handler, settings, network_info, temp_sensor=None
+    ):
         assert screen is not None, "screen parameter cannot be None"
         assert button_handler is not None, "button_handler parameter cannot be None"
         assert settings is not None, "settings parameter cannot be None"
@@ -49,6 +55,10 @@ class MenuSystem:
         ## @var network_info
         # @brief NetworkInfo instance for network status display.
         self.network_info = network_info
+
+        ## @var temp_sensor
+        # @brief TempSensorInfo instance for temperature display and fan control (can be None).
+        self.temp_sensor = temp_sensor
 
         ## @var font_title
         # @brief Font for the menu title.
@@ -112,8 +122,16 @@ class MenuSystem:
         self._datetime_being_edited = None
 
         ## @var _editing_field
-        # @brief Currently selected field when editing date/time (e.g., "year", "hour").
+        # @brief Currently selected field when editing date/time or wavelength range.
         self._editing_field = None
+
+        ## @var _wavelength_range_editing
+        # @brief Temporary wavelength range values being edited [min, max].
+        self._wavelength_range_editing = None
+
+        ## @var _original_wavelength_range
+        # @brief Backup of wavelength range when entering edit mode (for cancel operation).
+        self._original_wavelength_range = None
 
         self._build_menu_items()
 
@@ -148,6 +166,8 @@ class MenuSystem:
                 "max": config.SPECTROMETER.MAX_SCANS_TO_AVERAGE,
                 "step": config.SPECTROMETER.SCANS_TO_AVERAGE_STEP,
             },
+            {"label": "Plot range", "type": "wavelength_range"},
+            {"label": "Fan", "type": "fan_threshold"},
             {"label": "Date", "type": "datetime"},
             {"label": "WiFi", "type": "info", "display": "wifi"},
             {"label": "IP", "type": "info", "display": "ip"},
@@ -170,6 +190,8 @@ class MenuSystem:
                 selected_item = self._menu_items[self._selected_index]
                 if selected_item.get("type") == "datetime":
                     self._change_datetime_field(1)
+                elif selected_item.get("type") == "wavelength_range":
+                    self._change_wavelength_field(1)
                 else:
                     self._change_value(1)
             else:
@@ -184,6 +206,8 @@ class MenuSystem:
                 selected_item = self._menu_items[self._selected_index]
                 if selected_item.get("type") == "datetime":
                     self._change_datetime_field(-1)
+                elif selected_item.get("type") == "wavelength_range":
+                    self._change_wavelength_field(-1)
                 else:
                     self._change_value(-1)
             else:
@@ -198,7 +222,7 @@ class MenuSystem:
 
             if item_type == "action":
                 return selected_item.get("action")  # e.g., "START_CAPTURE"
-            elif item_type in ["numeric", "choice"]:
+            elif item_type in ["numeric", "choice", "fan_threshold"]:
                 self._edit_mode = not self._edit_mode  # Toggle edit mode
             elif item_type == "datetime":
                 if not self._edit_mode:
@@ -212,6 +236,18 @@ class MenuSystem:
                         self._edit_mode = False
                         self._datetime_being_edited = None
                         self._editing_field = None
+            elif item_type == "wavelength_range":
+                if not self._edit_mode:
+                    # Entering edit mode for wavelength range
+                    self._enter_wavelength_range_edit_mode()
+                else:
+                    # Already in edit mode - advance to next field or save
+                    if self._advance_wavelength_field():
+                        # All fields complete - save and exit
+                        self._commit_wavelength_range_changes()
+                        self._edit_mode = False
+                        self._wavelength_range_editing = None
+                        self._editing_field = None
 
         elif self.button_handler.get_pressed(config.BTN_BACK):
             if self._edit_mode:
@@ -222,6 +258,17 @@ class MenuSystem:
                     if self._original_offset_on_edit_start is not None:
                         self._time_offset = self._original_offset_on_edit_start
                     self._datetime_being_edited = None
+                    self._editing_field = None
+                elif selected_item.get("type") == "wavelength_range":
+                    # Restore original wavelength range (cancel changes)
+                    if self._original_wavelength_range is not None:
+                        config.PLOTTING.WAVELENGTH_RANGE_MIN_NM = (
+                            self._original_wavelength_range[0]
+                        )
+                        config.PLOTTING.WAVELENGTH_RANGE_MAX_NM = (
+                            self._original_wavelength_range[1]
+                        )
+                    self._wavelength_range_editing = None
                     self._editing_field = None
                 self._edit_mode = False
 
@@ -240,9 +287,11 @@ class MenuSystem:
         item_type = selected_item.get("type")
         key = selected_item.get("value_key")
 
-        # A setting was changed, so references are now invalid.
-        self.dark_reference_required = True
-        self.white_reference_required = True
+        # A setting was changed, so references are now invalid (for spectrometer settings).
+        # Fan threshold changes do not affect spectrometer references.
+        if item_type != "fan_threshold":
+            self.dark_reference_required = True
+            self.white_reference_required = True
 
         if item_type == "numeric":
             current_val = getattr(self.settings, key)
@@ -260,6 +309,18 @@ class MenuSystem:
                 setattr(self.settings, key, choices[new_idx])
             except ValueError:
                 setattr(self.settings, key, choices[0])
+
+        elif item_type == "fan_threshold":
+            # Adjust fan threshold via temp_sensor
+            if self.temp_sensor is not None:
+                current_threshold = self.temp_sensor.get_fan_threshold_c()
+                step = config.FAN_THRESHOLD_STEP_C
+                new_threshold = current_threshold + (step * direction)
+                new_threshold = max(
+                    config.FAN_THRESHOLD_MIN_C,
+                    min(config.FAN_THRESHOLD_MAX_C, new_threshold),
+                )
+                self.temp_sensor.set_fan_threshold_c(new_threshold)
 
     ##
     # @brief Gets the current display time with applied time offset.
@@ -416,6 +477,135 @@ class MenuSystem:
             return None
 
     ##
+    # @brief Enters edit mode for wavelength range fields.
+    # @details Saves the current wavelength range and initializes editing state.
+    #          Always starts with FIELD_WL_MIN.
+    def _enter_wavelength_range_edit_mode(self):
+        """Enters wavelength range edit mode, saving current values and setting initial field."""
+        self._edit_mode = True
+        self._original_wavelength_range = [
+            config.PLOTTING.WAVELENGTH_RANGE_MIN_NM,
+            config.PLOTTING.WAVELENGTH_RANGE_MAX_NM,
+        ]
+        self._wavelength_range_editing = [
+            config.PLOTTING.WAVELENGTH_RANGE_MIN_NM,
+            config.PLOTTING.WAVELENGTH_RANGE_MAX_NM,
+        ]
+        self._editing_field = self.FIELD_WL_MIN
+
+    ##
+    # @brief Advances to the next field in wavelength range editing.
+    # @return True if all fields are complete (ready to save), False otherwise.
+    def _advance_wavelength_field(self):
+        """Advances to the next field in wavelength range editing. Returns True if complete."""
+        assert self._editing_field is not None, "Editing field must be set"
+
+        if self._editing_field == self.FIELD_WL_MIN:
+            self._editing_field = self.FIELD_WL_MAX
+            return False
+        elif self._editing_field == self.FIELD_WL_MAX:
+            return True  # Complete
+
+        return False
+
+    ##
+    # @brief Changes the value of the currently selected wavelength range field.
+    # @param delta Integer indicating direction of change (-1 for decrease, +1 for increase).
+    # @details Enforces min/max limits and minimum gap between min and max values.
+    def _change_wavelength_field(self, delta):
+        """Changes the value of the currently selected wavelength range field."""
+        assert isinstance(delta, int) and delta in (-1, 1), "Delta must be -1 or 1"
+        assert (
+            self._wavelength_range_editing is not None
+        ), "No wavelength range being edited"
+        assert self._editing_field is not None, "No field selected"
+
+        step = config.PLOTTING.WAVELENGTH_EDIT_STEP_NM
+        min_limit = config.PLOTTING.WAVELENGTH_EDIT_MIN_LIMIT_NM
+        max_limit = config.PLOTTING.WAVELENGTH_EDIT_MAX_LIMIT_NM
+        min_gap = config.PLOTTING.WAVELENGTH_EDIT_MIN_GAP_NM
+
+        if self._editing_field == self.FIELD_WL_MIN:
+            # Editing minimum wavelength
+            new_min = self._wavelength_range_editing[0] + (step * delta)
+            # Clamp to limits and ensure gap with max
+            new_min = max(
+                min_limit, min(new_min, self._wavelength_range_editing[1] - min_gap)
+            )
+            self._wavelength_range_editing[0] = new_min
+        elif self._editing_field == self.FIELD_WL_MAX:
+            # Editing maximum wavelength
+            new_max = self._wavelength_range_editing[1] + (step * delta)
+            # Clamp to limits and ensure gap with min
+            new_max = max(
+                self._wavelength_range_editing[0] + min_gap, min(new_max, max_limit)
+            )
+            self._wavelength_range_editing[1] = new_max
+
+    ##
+    # @brief Commits the edited wavelength range to config.
+    def _commit_wavelength_range_changes(self):
+        """Commits the edited wavelength range to config."""
+        assert (
+            self._wavelength_range_editing is not None
+        ), "No wavelength range to commit"
+        config.PLOTTING.WAVELENGTH_RANGE_MIN_NM = self._wavelength_range_editing[0]
+        config.PLOTTING.WAVELENGTH_RANGE_MAX_NM = self._wavelength_range_editing[1]
+        print(
+            f"INFO: Wavelength range updated to "
+            f"{self._wavelength_range_editing[0]:.0f}nm - {self._wavelength_range_editing[1]:.0f}nm"
+        )
+
+    ##
+    # @brief Calculates the rectangle around the currently edited wavelength range field.
+    # @param value_str The wavelength range string being displayed.
+    # @param value_x The x-coordinate where the value starts.
+    # @param value_y The y-coordinate where the value is rendered.
+    # @return pygame.Rect for the blue box, or None if field is unknown.
+    # @details Wavelength range format is "###nm - ###nm" (e.g., "400nm - 620nm").
+    def _calculate_wavelength_field_rect(self, value_str, value_x, value_y):
+        """Calculates the rectangle around the currently edited wavelength range field."""
+        assert self._editing_field is not None, "Editing field must be set"
+
+        # Format: "400nm - 620nm"
+        # Find the position of " - " separator
+        separator_idx = value_str.find(" - ")
+        if separator_idx == -1:
+            return None
+
+        if self._editing_field == self.FIELD_WL_MIN:
+            # First field: from start to before "nm"
+            # Find the first "nm" which ends the min value
+            nm_idx = value_str.find("nm")
+            if nm_idx == -1:
+                return None
+            start_idx = 0
+            end_idx = nm_idx + 2  # Include "nm"
+        elif self._editing_field == self.FIELD_WL_MAX:
+            # Second field: after " - " to end
+            start_idx = separator_idx + 3  # After " - "
+            end_idx = len(value_str)
+        else:
+            return None
+
+        # Get the text before and the field text
+        text_before = value_str[:start_idx]
+        text_field = value_str[start_idx:end_idx]
+
+        # Calculate widths
+        width_before = self.font_value.size(text_before)[0] if text_before else 0
+        width_field = self.font_value.size(text_field)[0]
+        height = self.font_value.get_height()
+
+        # Calculate rectangle position
+        rect_x = value_x + width_before
+        rect_y = value_y
+        rect_width = width_field
+        rect_height = height
+
+        return pygame.Rect(rect_x, rect_y, rect_width, rect_height)
+
+    ##
     # @brief Calculates the rectangle around the currently edited datetime field.
     # @param dt The datetime object being displayed.
     # @param value_x The x-coordinate where the datetime value starts.
@@ -475,6 +665,14 @@ class MenuSystem:
             if selected_item.get("type") == "datetime" and self._editing_field:
                 # Show which field is being edited
                 hint = f"A: Next/Save | B: Cancel | X/Y: Edit {self._editing_field.upper()}"
+            elif (
+                selected_item.get("type") == "wavelength_range" and self._editing_field
+            ):
+                # Show which wavelength field is being edited
+                field_name = (
+                    "MIN" if self._editing_field == self.FIELD_WL_MIN else "MAX"
+                )
+                hint = f"A: Next/Save | B: Cancel | X/Y: Edit {field_name}"
             else:
                 hint = "A: Save | B: Cancel | X: Up | Y: Down"
         else:
@@ -543,6 +741,39 @@ class MenuSystem:
                 if self._edit_mode and idx == self._selected_index:
                     value_color = config.COLORS.YELLOW
 
+            elif item["type"] == "wavelength_range":
+                # Handle wavelength range item
+                # Use edited values if currently editing, otherwise use config values
+                if (
+                    self._edit_mode
+                    and idx == self._selected_index
+                    and self._wavelength_range_editing is not None
+                ):
+                    wl_min = self._wavelength_range_editing[0]
+                    wl_max = self._wavelength_range_editing[1]
+                    value_color = config.COLORS.YELLOW
+                else:
+                    wl_min = config.PLOTTING.WAVELENGTH_RANGE_MIN_NM
+                    wl_max = config.PLOTTING.WAVELENGTH_RANGE_MAX_NM
+
+                # Format: "400nm - 620nm"
+                value = f"{int(wl_min)}nm - {int(wl_max)}nm"
+
+            elif item["type"] == "fan_threshold":
+                # Handle fan threshold display with current temperature
+                if self.temp_sensor is not None:
+                    threshold = self.temp_sensor.get_fan_threshold_c()
+                    temp = self.temp_sensor.get_temperature_c()
+                    if isinstance(temp, (float, int)):
+                        value = f"Threshold {threshold}C (Current {temp:.0f}C)"
+                    else:
+                        value = f"Threshold {threshold}C (Temp: {temp})"
+                    if self._edit_mode and idx == self._selected_index:
+                        value_color = config.COLORS.YELLOW
+                else:
+                    value = "Not Available"
+                    value_color = config.COLORS.GRAY
+
             elif item["type"] == "info":
                 # Handle info items (WiFi, IP)
                 display_type = item.get("display")
@@ -573,8 +804,17 @@ class MenuSystem:
                             pygame.draw.rect(
                                 self.screen, config.COLORS.BLUE, field_rect, 1
                             )
-                    elif item["type"] in ["numeric", "choice"]:
-                        # For numeric/choice: box around entire value
+                    elif item["type"] == "wavelength_range" and self._editing_field:
+                        # For wavelength_range: box around specific field (min or max)
+                        field_rect = self._calculate_wavelength_field_rect(
+                            value, value_x, y_pos
+                        )
+                        if field_rect:
+                            pygame.draw.rect(
+                                self.screen, config.COLORS.BLUE, field_rect, 1
+                            )
+                    elif item["type"] in ["numeric", "choice", "fan_threshold"]:
+                        # For numeric/choice/fan_threshold: box around entire value
                         value_rect = pygame.Rect(
                             value_x - 2,
                             y_pos,

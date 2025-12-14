@@ -10,8 +10,7 @@ import pygame
 # Local imports
 import config
 from hardware import button_handler, leak_sensor, network_info, spectrometer_controller
-
-# from hardware import temp_sensor
+from hardware import temp_sensor
 from ui import (
     splash_screen,
     terms_screen,
@@ -143,7 +142,7 @@ def main():
     button_handler_inst = button_handler.ButtonHandler()
     leak_sensor_inst = leak_sensor.LeakSensor(shutdown_flag, leak_detected_flag)
     network_info_inst = network_info.NetworkInfo(shutdown_flag)
-    # temp_sensor_inst = temp_sensor.TempSensorInfo(shutdown_flag)
+    temp_sensor_inst = temp_sensor.TempSensorInfo(shutdown_flag)
     spec_controller_inst = spectrometer_controller.SpectrometerController(
         shutdown_flag=shutdown_flag,
         request_queue=spectrometer_request_queue,
@@ -156,7 +155,11 @@ def main():
 
     # --- Create UI Screen Instances ---
     menu_screen = menu_system.MenuSystem(
-        screen, button_handler_inst, spectrometer_settings, network_info_inst
+        screen,
+        button_handler_inst,
+        spectrometer_settings,
+        network_info_inst,
+        temp_sensor_inst,
     )
     spectro_screen = spectrometer_screen.SpectrometerScreen(
         screen,
@@ -170,7 +173,7 @@ def main():
     # --- Start Background Threads ---
     leak_sensor_inst.start()
     network_info_inst.start()
-    # temp_sensor_inst.start()
+    temp_sensor_inst.start()
     spec_controller_inst.start()
     data_manager_inst.start()
 
@@ -258,7 +261,7 @@ def main():
         leak_sensor_inst.stop()
         network_info_inst.stop()
         button_handler_inst.cleanup()
-        # temp_sensor_inst.stop()
+        temp_sensor_inst.stop()
         spec_controller_inst.stop()
         data_manager_inst.stop()
         pygame.quit()
