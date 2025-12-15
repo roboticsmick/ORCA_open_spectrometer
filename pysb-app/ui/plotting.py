@@ -1,4 +1,15 @@
-# pysb-app/ui/plotting.py
+## @file plotting.py
+#  @brief High-performance spectral plotting library for pygame-based visualization.
+#
+#  Provides optimized rendering of spectral data with data decimation, smoothing,
+#  and caching for real-time display at 30+ FPS. Includes helper functions for
+#  data preparation and two main classes:
+#  - OptimizedPygamePlotter: Core plotter with axes, labels, and NaN-safe rendering
+#  - FastSpectralRenderer: Wrapper with MD5 caching and performance monitoring
+#
+#  @details The rendering pipeline is: crop → smooth → decimate → render.
+#  Reduces ~2048 sensor points to ~300 display points while maintaining visual
+#  quality. Separate static/plot surfaces enable efficient partial redraws.
 
 import hashlib
 import time

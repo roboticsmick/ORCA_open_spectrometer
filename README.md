@@ -1,476 +1,785 @@
 # ORCA Open Spectrometer
 
-A portable, low-power spectrometer system using Ocean Optics ST-VIS spectrometers with a Raspberry Pi Zero 2W and touchscreen display. Designed for field work and scientific research.
+A portable spectrometer system using Ocean Optics ST-VIS spectrometers with a Raspberry Pi Zero 2W and LCD display. Designed for field work in a compact, low-power package.
 
-Built on the [PySeabreeze](https://github.com/ap--/python-seabreeze) library.
-
----
-
-## Quick Start Guide
-
-This guide will help you set up a Raspberry Pi Zero 2W from scratch. Follow each step in order.
-
-**Estimated time:** 30-45 minutes (mostly waiting for installations)
+**Version:** 1.0
+**Last Updated:** 2025-12-15
 
 ---
 
-## Step 1: What You Need
+## Table of Contents
 
-### Hardware
-
-- Raspberry Pi Zero 2W
-- Adafruit PiTFT 2.8" Resistive Touchscreen (Product ID: 1601)
-- High-quality microSD card (32GB or larger, Class 10 or better)
-- Ocean Optics compatible spectrometer (ST-VIS series)
-- USB power supply (2.5A recommended)
-- A computer with an SD card reader
-
-### Optional Hardware
-
-- DS3231 RTC module (keeps time when powered off)
-- MCP9808 temperature sensor
-- Cooling fan with MOSFET control
-- Custom PCB (see Hardware section below)
-
-### Software (on your computer)
-
-- Raspberry Pi Imager - [Download here](https://www.raspberrypi.com/software/)
-- SSH client (built into Mac/Linux, use PuTTY on Windows)
+1. [Hardware Requirements](#1-hardware-requirements)
+2. [Installing Ubuntu on the Raspberry Pi](#2-installing-ubuntu-on-the-raspberry-pi)
+3. [Setting Up WiFi](#3-setting-up-wifi)
+4. [Installing the Software](#4-installing-the-software)
+5. [Running the App](#5-running-the-app)
+6. [App Settings Reference](#6-app-settings-reference)
+7. [Capturing Reference Spectra (Calibration)](#7-capturing-reference-spectra-calibration)
+8. [Capturing Spectra](#8-capturing-spectra)
+9. [Downloading Data to Your Computer](#9-downloading-data-to-your-computer)
+10. [Advanced: Editing config.py](#10-advanced-editing-configpy)
+11. [Data Format & Storage](#11-data-format--storage)
+12. [Hardware Information](#12-hardware-information)
+13. [Troubleshooting](#13-troubleshooting)
 
 ---
 
-## Step 2: Flash Ubuntu to the SD Card
+## 1. Hardware Requirements
 
-### 2.1 Install Raspberry Pi Imager
+- **Raspberry Pi Zero 2W** (or Pi 4)
+- **Adafruit PiTFT 2.8" display** (320x240)
+- **Ocean Optics ST-VIS spectrometer** (USB)
+- **High-quality microSD card** (Samsung 128GB PRO Plus recommended)
+- **MCP9808 temperature sensor** (optional)
+- **5V cooling fan with MOSFET control** (optional)
+- **Leak sensor** (optional, for underwater housing)
 
-**On Ubuntu/Debian:**
+---
+
+## 2. Installing Ubuntu on the Raspberry Pi
+
+### 2.1 Download Raspberry Pi Imager
 
 ```bash
+# Ubuntu/Debian
 sudo apt install rpi-imager
+
+# Or download from: https://www.raspberrypi.com/software/
 ```
 
-**On other systems:** Download from <https://www.raspberrypi.com/software/>
+### 2.2 Flash the SD Card
 
-### 2.2 Flash the Operating System
-
-1. Insert your microSD card into your computer
-2. Open **Raspberry Pi Imager**
-3. Click **"Choose Device"** → Select **Raspberry Pi Zero 2 W**
-4. Click **"Choose OS"** → Select **Other general-purpose OS** → **Ubuntu** → **Ubuntu Server 22.04 LTS (64-bit)**
-5. Click **"Choose Storage"** → Select your microSD card
-6. Click **"Next"**
-
-### 2.3 Configure Settings (Important!)
-
-When prompted "Would you like to apply OS customization settings?", click **"Edit Settings"**
-
-**General Tab:**
+1. Open **Raspberry Pi Imager**
+2. **Choose Device**: Raspberry Pi Zero 2W
+3. **Choose OS**: Ubuntu 22.04 Server LTS
+4. **Choose Storage**: Select your SD card
+5. Click **Edit Settings** and configure:
 
 | Setting | Value |
 |---------|-------|
-| Set hostname | `rpi` |
-| Set username and password | Username: `pi`, Password: `spectro` |
-| Configure wireless LAN | Check this box |
-| SSID | Your WiFi network name |
-| Password | Your WiFi password |
-| Wireless LAN country | Your country code (e.g., `AU`, `US`, `GB`) |
-| Set locale settings | Check this box |
-| Time zone | Your timezone (e.g., `Australia/Brisbane`) |
-| Keyboard layout | `us` |
+| Hostname | `rpi` |
+| Username | `pi` |
+| Password | `spectro` (or your choice) |
+| Configure WiFi | Yes (see section 3) |
+| WiFi Country | Your country code (e.g., `AU`) |
+| Timezone | Your timezone (e.g., `Australia/Brisbane`) |
+| Enable SSH | Yes, with password authentication |
 
-**Services Tab:**
+1. Click **Save**, then **Yes** to apply settings
+2. Flash the image to the SD card
 
-| Setting | Value |
-|---------|-------|
-| Enable SSH | Check this box |
-| Use password authentication | Select this option |
+### 2.3 First Boot
 
-1. Click **"Save"**
-2. Click **"Yes"** to apply OS customization
-3. Click **"Yes"** to confirm and start writing
-4. Wait for the write and verification to complete
-5. Remove the SD card when prompted
+1. Insert the SD card into the Raspberry Pi
+2. Connect power
+3. Wait 2-3 minutes for first boot (the Pi expands the filesystem)
+4. The Pi will automatically connect to your configured WiFi
 
 ---
 
-## Step 3: First Boot
+## 3. Setting Up WiFi
 
-1. Insert the microSD card into the Raspberry Pi
-2. Connect the PiTFT display (if not already connected)
-3. Make sure your WiFi network is available (turn on your phone hotspot if using that)
-4. Connect power to the Raspberry Pi
-5. Wait 2-3 minutes for the first boot to complete
+### 3.1 Initial WiFi (During Imaging)
 
----
+Configure your primary WiFi during the imaging process (section 2.2). Use your mobile hotspot for easy field access.
 
-## Step 4: Connect via SSH
+### 3.2 Adding Additional WiFi Networks
 
-You need to connect to the Pi from your computer to run the setup.
+#### Method A: Edit SD card directly (before boot)
 
-### 4.1 Find the Pi's IP Address
+1. Insert the SD card into your computer
+2. Navigate to the root filesystem
+3. Edit `/etc/netplan/50-cloud-init.yaml`
 
-**Option A - Try the hostname first:**
-
-```bash
-ping rpi.local
-```
-
-If you see replies with an IP address, use that IP.
-
-**Option B - Scan your network:**
-
-On Linux/Mac:
-
-```bash
-# First, find your network range
-ip addr show | grep "inet "
-# Look for something like: inet 192.168.1.50/24
-# Your network is 192.168.1.0/24
-
-# Scan for devices
-nmap -sn 192.168.1.0/24
-# Look for "Raspberry Pi" in the results
-```
-
-**Option C - Check your router's admin page:**
-Log into your router and look for connected devices named "rpi"
-
-### 4.2 Connect via SSH
+#### Method B: Edit via SSH (after boot)
 
 ```bash
 ssh pi@<IP_ADDRESS>
+sudo nano /etc/netplan/50-cloud-init.yaml
 ```
 
-Replace `<IP_ADDRESS>` with the actual IP (e.g., `ssh pi@192.168.1.100`)
+**Example configuration:**
 
-When prompted:
+```yaml
+network:
+    version: 2
+    wifis:
+        renderer: networkd
+        wlan0:
+            access-points:
+                "Your_Hotspot_Name":
+                    password: "hotspot_password"
+                "Home_WiFi":
+                    password: "home_password"
+                "Office_WiFi":
+                    password: "office_password"
+            dhcp4: true
+            optional: true
+```
 
-- Type `yes` to accept the host key (first time only)
-- Enter password: `spectro`
+> **Important:** YAML requires consistent indentation (use spaces, not tabs).
 
-**You should now see a command prompt like:** `pi@rpi:~$`
+**Apply changes:**
+
+```bash
+sudo netplan apply
+```
+
+### 3.3 Finding the Pi's IP Address
+
+- Check your router/hotspot connected devices list
+- Or from another computer: `ping rpi.local`
+- The IP is also displayed in the app menu under "IP"
 
 ---
 
-## Step 5: Download the Spectrometer Software
+## 4. Installing the Software
 
-Run these commands on the Raspberry Pi (via SSH):
+### 4.1 Connect to the Pi via SSH
 
 ```bash
-# Install git (if not already installed)
-sudo apt update && sudo apt install -y git
+ssh pi@<IP_ADDRESS>
+# Password: spectro (or your password)
+```
 
-# Download the spectrometer software
+### 4.2 Download and Run the Setup Script
+
+```bash
 cd ~
-git clone https://github.com/USER/ORCA_open_spectrometer.git
-
-# Navigate to the application folder
+git clone https://github.com/YOUR_REPO/ORCA_open_spectrometer.git
 cd ORCA_open_spectrometer/pysb-app
-```
-
-> **Note:** Replace `USER` with the actual GitHub username/organization for this repository.
-
----
-
-## Step 6: Run the Setup Script
-
-This script will install everything automatically. It takes about 20-30 minutes.
-
-```bash
-# Make the script executable
 chmod +x setup_pi.sh
-
-# Run the setup script
 sudo ./setup_pi.sh
 ```
 
-**What the setup script does:**
+The setup script:
 
-- Updates the system packages
-- Installs the PiTFT display driver
-- Sets up the Python environment
-- Installs the spectrometer libraries
-- Configures I2C for temperature sensor
-- Optimizes boot time (reduces from 2+ minutes to ~20 seconds)
-- Sets up user permissions for hardware access
+- Installs all system dependencies
+- Creates a Python virtual environment
+- Installs Python packages (pygame, seabreeze, etc.)
+- Configures the display
+- Sets up the app to run as a systemd service on boot
 
-**During setup:**
-
-- The script will ask a few questions - just press Enter for defaults
-- If asked about creating a systemd service, type `n` (unless you want auto-start)
-- The display driver installation may show warnings - this is normal
-
----
-
-## Step 7: Reboot
-
-After the setup script completes, you must reboot:
+### 4.3 Reboot
 
 ```bash
 sudo reboot
 ```
 
-Wait about 30 seconds, then reconnect via SSH:
-
-```bash
-ssh pi@<IP_ADDRESS>
-```
+After reboot, the app should start automatically.
 
 ---
 
-## Step 8: Run the Spectrometer Application
+## 5. Running the App
+
+### 5.1 Automatic Startup (Default)
+
+The app runs automatically as a systemd service when the Pi boots. No action required.
+
+### 5.2 Service Commands
 
 ```bash
-# Navigate to the project folder
+# Check if the app is running
+sudo systemctl status pysb-app.service
+
+# Stop the app
+sudo systemctl stop pysb-app.service
+
+# Start the app
+sudo systemctl start pysb-app.service
+
+# Restart the app
+sudo systemctl restart pysb-app.service
+
+# View live logs
+journalctl -u pysb-app.service -f
+```
+
+### 5.3 Manual Execution (For Testing)
+
+```bash
+# Stop the service first
+sudo systemctl stop pysb-app.service
+
+# Activate virtual environment and run
 cd ~/pysb-app
-
-# Activate the Python environment
 source pysb_venv/bin/activate
-
-# Run the application
 python3 main.py
 ```
 
-The application should now start and display on the PiTFT screen!
+> **Note:** The service configuration may need to be set up if not included in setup_pi.sh. See Section 10 for details.
 
 ---
 
-## Using the Spectrometer
+## 6. App Settings Reference
 
-### Button Controls
+### 6.1 Button Controls
 
-| Button | Function |
-|--------|----------|
-| **X** (top) | Navigate up / Increase value |
-| **Y** (bottom) | Navigate down / Decrease value |
-| **A** | Select / Confirm / Start capture |
-| **B** | Back / Cancel |
+The app uses 4 buttons:
 
-### Menu Options
+| Button | Menu Action | Live View Action |
+|--------|-------------|------------------|
+| **UP (X)** | Previous item / Increase value | Open calibration menu |
+| **DOWN (Y)** | Next item / Decrease value | Rescale Y-axis |
+| **A (ENTER)** | Select / Confirm | Freeze spectrum |
+| **B (BACK)** | Cancel / Go back | Return to menu |
 
-- **Integration Time:** How long the sensor collects light (longer = more signal)
-- **Scans to Average:** Number of readings to average (more = smoother data)
-- **Collection Mode:** RAW (raw counts) or REFLECTANCE (calibrated %)
-- **Plot Range:** Wavelength range to display
-- **Fan:** Temperature threshold for cooling fan
+### 6.2 Integration Time
 
-### Taking Measurements
+Controls how long the sensor collects light per measurement.
 
-1. Select **"Start Capture"** from the menu
-2. For reflectance mode, you'll be prompted to capture:
-   - **Dark reference** (cover the sensor)
-   - **White reference** (measure a white standard)
-3. Press **A** to capture spectra
-4. Data is automatically saved to the SD card
+| Parameter | Value |
+|-----------|-------|
+| Default | 1000 ms |
+| Minimum | 100 ms |
+| Maximum | 6000 ms |
+| Step | 50 ms |
 
----
+**Tips:**
 
-## Troubleshooting
+- **Low light conditions**: Increase integration time
+- **Bright light / saturation**: Decrease integration time
+- Use **Auto-Integration** (Section 7.4) to find the optimal value
 
-### Can't connect via SSH
+### 6.3 Collection Mode
 
-- Make sure both devices are on the same WiFi network
-- Wait a full 3 minutes after powering on for first boot
-- Try using the IP address instead of `rpi.local`
-- Check that WiFi credentials in Step 2.3 are correct
+| Mode | Description |
+|------|-------------|
+| **RAW** | Direct sensor readings as ADC counts (0-16383) |
+| **REFLECTANCE** | Calibrated reflectance ratio (requires calibration) |
 
-### Display not working after reboot
+#### RAW Mode
 
-- Ensure the display ribbon cable is firmly connected
-- Re-run the setup script if needed
-- Check that you completed the full reboot
+- Shows direct sensor values
+- No calibration required
+- Best for: testing, alignment, troubleshooting
 
-### Spectrometer not detected
+#### Reflectance Mode
 
-- Unplug and replug the spectrometer USB cable
-- Run: `lsusb` to check if it appears
-- Try a different USB cable or port
+- Calculates relative reflectance using dark and white references
+- **Requires calibration** before use (see Section 7)
 
-### Temperature sensor shows "N/A"
-
-- Check I2C wiring (SDA→GPIO2, SCL→GPIO3)
-- Run the diagnostic: `python3 test_temp_sensor.py`
-- Verify I2C is enabled: `sudo i2cdetect -y 1`
-
-### Application crashes or errors
-
-- Make sure the virtual environment is activated: `source pysb_venv/bin/activate`
-- Check you're in the correct directory: `cd ~/pysb-app`
-- View error logs for details
-
----
-
-## Testing Hardware Components
-
-### Test Temperature Sensor (MCP9808)
-
-```bash
-cd ~/pysb-app
-source pysb_venv/bin/activate
-python3 test_temp_sensor.py
-```
-
-### Test I2C Devices
-
-```bash
-sudo i2cdetect -y 1
-```
-
-You should see:
-
-- `18` = MCP9808 temperature sensor
-- `68` = DS3231 RTC
-
-### Test Spectrometer
-
-```bash
-cd ~/pysb-app
-source pysb_venv/bin/activate
-python -m seabreeze.cseabreeze_backend ListDevices
-```
-
-### Test RTC
-
-```bash
-sudo hwclock -r
-```
-
----
-
-## File Locations
-
-After setup, files are located at:
+**Reflectance Formula:**
 
 ```text
-~/pysb-app/
-├── main.py              # Main application
-├── config.py            # Configuration settings
-├── pysb_venv/           # Python virtual environment
-├── hardware/            # Hardware control modules
-├── ui/                  # User interface modules
-├── data/                # Data management modules
-├── assets/              # Fonts and images
-└── lib/                 # Additional libraries
+Reflectance = (Target - Dark) / (White - Dark)
 ```
 
-Captured spectra are saved to: `~/pysb-app/data/` (or as configured)
+Where:
+
+- **Target** = Raw spectrum of your sample
+- **Dark** = Raw spectrum with sensor covered (no light)
+- **White** = Raw spectrum of a white reference standard (e.g., Spectralon)
+
+**Interpreting Values:**
+
+| Value | Meaning |
+|-------|---------|
+| 0.0 | No reflectance (absorbs all light) |
+| 1.0 | Same reflectance as white reference (100%) |
+| > 1.0 | Brighter than reference (fluorescence, specular reflection) |
+
+> **Note:** Values > 1.0 are valid and are not clipped.
+
+### 6.4 Scans to Average
+
+Averages multiple scans to reduce noise.
+
+| Parameter | Value |
+|-----------|-------|
+| Default | 1 |
+| Minimum | 0 |
+| Maximum | 50 |
+| Step | 1 |
+
+> **Trade-off:** Higher values = smoother data, but slower updates.
+
+### 6.5 Display Wavelength Range
+
+Controls the X-axis range shown on the plot.
+
+| Parameter | Value |
+|-----------|-------|
+| Default Min | 400 nm |
+| Default Max | 620 nm |
+| Minimum Limit | 340 nm |
+| Maximum Limit | 850 nm |
+| Step | 20 nm |
+
+> **Important:** This only affects the **display**. The full spectrum is always saved to CSV.
+
+**Editing:**
+
+1. Press A to start editing (MIN field highlighted in blue)
+2. Use UP/DOWN to adjust value
+3. Press A to move to MAX field
+4. Press A again to save
+5. Press B anytime to cancel
+
+### 6.6 Date/Time
+
+Sets the timestamp used in saved filenames. This creates a temporary offset from system time (not a permanent clock change).
+
+**Editing fields:** Year → Month → Day → Hour → Minute
+
+### 6.7 Fan Threshold
+
+Controls the cooling fan activation temperature.
+
+| Parameter | Value |
+|-----------|-------|
+| Default | 0°C (always on) |
+| Minimum | 0°C |
+| Maximum | 60°C |
+| Step | 5°C |
+
+**Display format:** `Fan: Threshold 40C (Current 32C)`
+
+| Setting | Behavior |
+|---------|----------|
+| 0°C | Fan always runs (maximum cooling) |
+| 40°C | Fan runs only when temperature >= 40°C |
+
+### 6.8 Network Info (Read-Only)
+
+- **WiFi**: Current network name
+- **IP**: Current IP address (use this for SSH)
 
 ---
 
-## Adding Additional WiFi Networks
+## 7. Capturing Reference Spectra (Calibration)
 
-If you need to add more WiFi networks later:
+Calibration is **required** for Reflectance mode. Both references must be captured at the **same integration time and averaging settings**.
 
-1. SSH into the Pi
-2. Edit the network configuration:
+### 7.1 Access Calibration Menu
 
-   ```bash
-   sudo nano /etc/netplan/50-cloud-init.yaml
-   ```
+1. Enter live view (Menu → Start Capture)
+2. Press **X (UP)** to open calibration menu
 
-3. Add your network under `access-points`:
+```text
+CALIBRATION MENU
 
-   ```yaml
-   network:
-       version: 2
-       wifis:
-           wlan0:
-               access-points:
-                   "Existing_Network":
-                       password: "existing_password"
-                   "New_Network":
-                       password: "new_password"
-               dhcp4: true
-   ```
+A: White Reference - Not set
+X: Dark Reference - Not set
+Y: Auto integration - Not complete
 
-4. Save (Ctrl+O, Enter) and exit (Ctrl+X)
-5. Apply changes: `sudo netplan apply`
+A:White | X:Dark | Y:Auto | B:Back
+```
+
+### 7.2 Capture Dark Reference
+
+The dark reference captures sensor noise when no light reaches the sensor.
+
+1. Press **X** to start dark reference capture
+2. **Cover the sensor completely** (or close the shutter)
+3. The live view shows raw sensor data
+4. Press **A** to freeze when ready
+5. Press **A** to save, or **B** to discard and retake
+
+### 7.3 Capture White Reference
+
+The white reference captures maximum expected reflectance.
+
+1. Press **A** to start white reference capture
+2. **Point at a white reference target** (e.g., Spectralon, white tile)
+3. The live view shows raw sensor data
+4. Press **A** to freeze when ready
+5. Press **A** to save, or **B** to discard and retake
+
+### 7.4 Auto-Integration
+
+Automatically finds the optimal integration time by targeting 80-95% sensor saturation.
+
+1. Press **Y** to start auto-integration setup
+2. **Point at your brightest expected sample** (usually white reference)
+3. Press **A** to begin the algorithm
+4. Wait for iterations to complete (max 20)
+5. Review the proposed integration time
+6. Press **A** to apply, or **B** to cancel
+
+> **Note:** Applying auto-integration **invalidates** existing dark and white references. You must recapture them.
+
+### 7.5 When References Become Invalid
+
+References are invalidated when you change:
+
+- **Integration time** → Both dark and white invalidated
+- **Scans to average** → Both dark and white invalidated
+
+The app will display "CALIBRATE REQUIRED" if you try to use Reflectance mode with invalid references.
 
 ---
 
-## Hardware Documentation
+## 8. Capturing Spectra
 
-### Custom PCB
+### 8.1 Live View
 
-A custom PCB was designed to add:
+1. From menu, select **Start Capture**
+2. Live spectrum updates at ~30 FPS
+3. Status bar shows: `RAW | INT:1000ms | AVG:1 | SCANS:0 | LIVE`
+
+### 8.2 Freeze and Save
+
+1. Press **A** to freeze the current spectrum
+2. Review the frozen plot (spectrometer pauses)
+3. Press **A** to save to file
+4. Press **B** to discard and return to live view
+
+### 8.3 Saved File Location
+
+Files are saved to: `~/pysb-app/spectra_data/YYYY-MM-DD/`
+
+Each day creates a new folder with:
+
+- CSV file containing all spectra
+- PNG plot images for each capture
+
+### 8.4 Rescale Y-Axis
+
+Press **Y** in live view to auto-scale the Y-axis based on current data.
+
+---
+
+## 9. Downloading Data to Your Computer
+
+### 9.1 Prerequisites
+
+| Platform | Requirements |
+|----------|--------------|
+| **Ubuntu/Linux** | Terminal (built-in) |
+| **macOS** | Terminal (built-in) |
+| **Windows** | WSL (Windows Subsystem for Linux) |
+
+**Installing WSL on Windows:**
+
+```powershell
+# Run in PowerShell as Administrator
+wsl --install
+wsl --install -d Ubuntu
+```
+
+### 9.2 Using rsync (Recommended)
+
+rsync is efficient for syncing folders and resuming interrupted transfers.
+
+**Download all data:**
+
+```bash
+# Create local folder
+mkdir -p ~/spectra_data
+
+# Sync all data from Pi
+rsync -av --progress pi@192.168.1.105:~/pysb-app/spectra_data/ ~/spectra_data/
+```
+
+**Download specific date:**
+
+```bash
+rsync -av --progress pi@192.168.1.105:~/pysb-app/spectra_data/2025-12-15/ ~/spectra_data/2025-12-15/
+```
+
+**Resume interrupted transfer:**
+
+```bash
+rsync -av --progress --partial pi@192.168.1.105:~/pysb-app/spectra_data/ ~/spectra_data/
+```
+
+### 9.3 Using scp
+
+scp is simpler for one-off file copies.
+
+**Download single file:**
+
+```bash
+scp pi@192.168.1.105:~/pysb-app/spectra_data/2025-12-15/2025-12-15_spectra_log.csv ./
+```
+
+**Download entire folder:**
+
+```bash
+scp -r pi@192.168.1.105:~/pysb-app/spectra_data/2025-12-15/ ./2025-12-15/
+```
+
+### 9.4 Windows: Accessing WSL Files
+
+After downloading to WSL, access files in Windows Explorer:
+
+```text
+\\wsl$\Ubuntu\home\yourusername\spectra_data
+```
+
+Or copy to Windows filesystem:
+
+```bash
+cp -r ~/spectra_data /mnt/c/Users/YourName/Desktop/
+```
+
+### 9.5 macOS: Using Finder
+
+```text
+Go menu → Connect to Server → sftp://pi@192.168.1.105
+```
+
+### 9.6 SSH Key Setup (Optional)
+
+For passwordless access:
+
+```bash
+# Generate key (on your computer)
+ssh-keygen -t rsa -b 4096
+
+# Copy to Pi
+ssh-copy-id pi@192.168.1.105
+```
+
+---
+
+## 10. Advanced: Editing config.py
+
+To customize default values or enable/disable hardware features, edit the `config.py` file.
+
+### 10.1 Stop the Service
+
+```bash
+ssh pi@<IP_ADDRESS>
+sudo systemctl stop pysb-app.service
+```
+
+### 10.2 Edit config.py
+
+```bash
+cd ~/pysb-app
+source pysb_venv/bin/activate
+nano config.py  # or vim config.py
+```
+
+### 10.3 Key Configuration Sections
+
+#### Hardware Flags
+
+```python
+HARDWARE = {
+    "USE_DISPLAY_HAT": False,         # Pimoroni Display HAT
+    "USE_ADAFRUIT_PITFT": True,       # Adafruit PiTFT 2.8"
+    "USE_GPIO_BUTTONS": False,        # On-board GPIO buttons
+    "USE_HALL_EFFECT_BUTTONS": True,  # External Hall effect buttons
+    "USE_LEAK_SENSOR": True,          # Leak detection hardware
+    "USE_SPECTROMETER": True,         # Ocean Optics spectrometer
+    "USE_TEMP_SENSOR_IF_AVAILABLE": True  # MCP9808 sensor
+}
+```
+
+#### Spectrometer Defaults
+
+```python
+class SPECTROMETER:
+    DEFAULT_INTEGRATION_TIME_MS = 1000
+    MIN_INTEGRATION_TIME_MS = 100
+    MAX_INTEGRATION_TIME_MS = 6000
+    INTEGRATION_TIME_STEP_MS = 50
+    HW_MAX_ADC_COUNT = 16383  # 14-bit ADC
+```
+
+#### Fan Control
+
+```python
+FAN_ENABLE_PIN = 4           # GPIO pin for MOSFET gate
+FAN_DEFAULT_THRESHOLD_C = 0  # 0 = always on
+FAN_THRESHOLD_MIN_C = 0
+FAN_THRESHOLD_MAX_C = 60
+FAN_THRESHOLD_STEP_C = 5
+```
+
+#### Plotting Defaults
+
+```python
+class PLOTTING:
+    USE_LIVE_SMOOTHING = True
+    LIVE_SMOOTHING_WINDOW_SIZE = 9
+    WAVELENGTH_RANGE_MIN_NM = 400.0  # Default display min
+    WAVELENGTH_RANGE_MAX_NM = 620.0  # Default display max
+    TARGET_DISPLAY_POINTS = 300      # Decimation for 30+ FPS
+```
+
+#### Auto-Integration Parameters
+
+```python
+class AUTO_INTEGRATION:
+    TARGET_LOW_PERCENT = 80.0   # Lower saturation target
+    TARGET_HIGH_PERCENT = 95.0  # Upper saturation target
+    MAX_ITERATIONS = 20
+    PROPORTIONAL_GAIN = 0.8
+```
+
+### 10.4 Test Changes
+
+```bash
+# Run manually to test
+python3 main.py
+
+# If working, restart service
+sudo systemctl start pysb-app.service
+```
+
+### 10.5 Make Changes Permanent
+
+Changes to `config.py` persist across reboots. The service reads the config on startup.
+
+---
+
+## 11. Data Format & Storage
+
+### 11.1 Folder Structure
+
+```text
+~/pysb-app/spectra_data/
+├── 2025-12-14/
+│   ├── 2025-12-14_spectra_log.csv
+│   ├── spectrum_RAW_FIBER_2025-12-14-103000.png
+│   └── spectrum_REFLECTANCE_FIBER_2025-12-14-104500.png
+└── 2025-12-15/
+    ├── 2025-12-15_spectra_log.csv
+    └── spectrum_RAW_FIBER_2025-12-15-091500.png
+```
+
+### 11.2 CSV Format
+
+Each row contains one spectrum:
+
+| Column | Description |
+|--------|-------------|
+| timestamp_utc | ISO format timestamp |
+| spectra_type | RAW, REFLECTANCE, DARK, WHITE, RAW_REFLECTANCE |
+| lens_type | FIBER, CABLE, or FIBER+CABLE |
+| integration_time_ms | Integration time used |
+| scans_to_average | Number of averaged scans |
+| temperature_c | Housing temperature (if sensor available) |
+| 340.12, 340.24, ... | Wavelength columns with intensity values |
+
+### 11.3 Spectra Types
+
+| Type | Description |
+|------|-------------|
+| RAW | Direct sensor measurement in ADC counts |
+| REFLECTANCE | Calibrated reflectance ratio |
+| DARK | Dark reference capture |
+| WHITE | White reference capture |
+| RAW_REFLECTANCE | Raw target data saved alongside reflectance |
+
+### 11.4 PNG Plots
+
+- Generated automatically for RAW and REFLECTANCE captures
+- Calibration captures (DARK, WHITE) do not generate plots
+- High resolution suitable for publications
+
+---
+
+## 12. Hardware Information
+
+### 12.1 Custom Breakout PCB
+
+The optional breakout PCB provides:
 
 - USB-C power input
 - Blue Robotics waterproof power switch
 - Real-time clock (DS3231) with battery backup
-- Leak sensor input
-- Button inputs
+- Leak sensor input (Blue Robotics SOS probes)
+- External button inputs
 - I2C and UART breakouts
 
-The complete schematic and board design can be found in the `PCB/` folder.
+See the `/PCB` folder for schematics and board files.
 
-![PCB Front](https://github.com/user-attachments/assets/a64ad8f9-ed21-4b6f-b43d-9462d401118d)
+### 12.2 Wiring Reference
 
-![PCB Back](https://github.com/user-attachments/assets/7c0f146f-47bb-43a3-b808-453892763aac)
+```text
+Fan Red Wire    → 5V through MOSFET drain
+Fan Black Wire  → Ground
+MOSFET Gate     → GPIO 4
+MCP9808 SDA     → GPIO 2 (I2C data)
+MCP9808 SCL     → GPIO 3 (I2C clock)
+MCP9808 VCC     → 3.3V
+MCP9808 GND     → Ground
+Leak Sensor     → GPIO 26
+```
 
-### Leak Sensor
+### 12.3 Power Consumption
 
-Based on the Blue Robotics leak sensor design, using Blue Robotics SOS leak sensor probes.
-
-![Leak Sensor](https://github.com/user-attachments/assets/3c34cd6f-63d9-44bc-a1fa-a32ff59414d8)
-
-### RTC Module
-
-Based on Adafruit's I2C DS3231 module design.
-
-![RTC Module](https://github.com/user-attachments/assets/7edfee91-a727-4598-ba51-139883b82f8c)
-
-### Wiring Reference
-
-| Component | Raspberry Pi Pin |
-|-----------|------------------|
-| **I2C SDA** | GPIO 2 (Pin 3) |
-| **I2C SCL** | GPIO 3 (Pin 5) |
-| **Fan Control** | GPIO 4 (Pin 7) |
-| **Button A** | GPIO 27 |
-| **Button B** | GPIO 23 |
-| **Button X** | GPIO 22 |
-| **Button Y** | GPIO 17 |
-| **Leak Sensor** | GPIO 26 |
-
----
-
-## Power Consumption
-
-Using a 10000mAh battery pack, the system runs for approximately **10 hours** under typical use.
+With a 10,000mAh battery:
 
 | Measurement | Value |
 |-------------|-------|
-| Current (live feed) | ~0.6A |
+| Current (live capture) | ~0.6A |
 | Voltage | 5.1V |
-| Power consumption | 3.06W |
-| Battery capacity | 37Wh (10000mAh × 3.7V) |
-| Efficiency | ~85% |
-| Runtime | ~10.3 hours |
+| Power | 3.06W |
+| Expected runtime | ~10 hours (85% efficiency) |
 
 ---
 
-## Testing on Ubuntu PC (Development)
+## 13. Troubleshooting
 
-To test the spectrometer on a regular Ubuntu PC (without the Pi):
+### 13.1 App Won't Start
 
 ```bash
-cd ~
-mkdir pysb-dev
-cd pysb-dev
-python3 -m venv --system-site-packages venv
-source venv/bin/activate
-pip install seabreeze[pyseabreeze]
-seabreeze_os_setup
+# Check service status
+sudo systemctl status pysb-app.service
+
+# View detailed logs
+journalctl -u pysb-app.service -n 50
+
+# Restart service
+sudo systemctl restart pysb-app.service
 ```
 
+### 13.2 No Spectrometer Detected
+
+```bash
+# Check USB devices
+lsusb | grep -i ocean
+
+# Try unplugging and reconnecting the spectrometer
+# Check cable connection
+```
+
+### 13.3 Can't SSH to Pi
+
+```bash
+# Verify Pi is on network
+ping rpi.local
+
+# Find Pi on local network
+nmap -sn 192.168.1.0/24 | grep -B 2 "Raspberry"
+
+# Try hostname
+ssh pi@rpi.local
+```
+
+### 13.4 Display Not Working
+
+- Check display ribbon cable connection
+- Verify `USE_ADAFRUIT_PITFT: True` in config.py
+- Check framebuffer exists: `ls /dev/fb1`
+
+### 13.5 References Invalid Error
+
+- Recapture dark and white references after changing integration time or averaging
+- Both references must use the same settings
+
+### 13.6 WiFi Not Connecting
+
+- Check `/etc/netplan/50-cloud-init.yaml` syntax
+- Verify SSID and password are correct
+- Check WiFi country code matches your location
+
 ---
 
-## License
+## Credits
 
-This project is designed for educational and research purposes. Please ensure compliance with all applicable licenses for the software components used.
+Special thanks to the [PySeabreeze](https://github.com/ap--/python-seabreeze) project for enabling Ocean Optics spectrometer support on ARM devices.
 
 ---
 
-## Acknowledgments
+## Support
 
-Thanks to the [python-seabreeze](https://github.com/ap--/python-seabreeze) team for maintaining the PySeabreeze API, which makes this project possible on ARM devices.
+- Report issues: [GitHub Issues](https://github.com/YOUR_REPO/issues)
+- Technical documentation: See `pysb-app/app_guide.md`

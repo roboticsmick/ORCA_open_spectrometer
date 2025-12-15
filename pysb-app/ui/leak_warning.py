@@ -1,12 +1,23 @@
-# pysb-app/ui/leak_warning.py
+## @file leak_warning.py
+#  @brief Critical leak warning display for emergency shutdown.
+#
+#  Displays a full-screen red warning when a leak is detected, instructing
+#  the user to wait for full shutdown before removing the housing.
 
 import pygame
 import config
 import time
 from ui import display_utils
 
+
+## @brief Display critical leak warning screen and wait for shutdown.
+#
+#  Fills the screen with red and displays a warning message about the
+#  detected leak. Holds for 5 seconds to allow the user to read the message
+#  before the application terminates.
+#
+#  @param[in] screen The pygame surface to draw on.
 def show(screen):
-    """Displays a critical leak warning message."""
     screen.fill(config.COLORS.RED)
 
     font_title = pygame.font.Font(None, 36)

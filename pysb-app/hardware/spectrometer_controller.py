@@ -1,4 +1,13 @@
-# pysb-app/hardware/spectrometer_controller.py
+## @file spectrometer_controller.py
+#  @brief Background thread for USB spectrometer control via Seabreeze library.
+#
+#  Provides continuous spectral data capture with session-based validity tracking.
+#  Implements queue-based command interface for integration time, scan averaging,
+#  collection mode, and reference capture. Supports RAW and REFLECTANCE modes.
+#
+#  @details Session validity tracking ensures stale scans (from before the current
+#  session) are discarded. This prevents displaying old data when returning from
+#  menu or after settings changes.
 
 """
 Spectrometer Controller Thread

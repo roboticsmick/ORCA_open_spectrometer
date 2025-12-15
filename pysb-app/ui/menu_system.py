@@ -1,4 +1,22 @@
-# pysb-app/ui/menu_system.py
+## @file menu_system.py
+#  @brief Main menu system for navigating settings and starting capture.
+#
+#  Provides a touchscreen-friendly menu interface for the spectrometer
+#  application. Supports navigation with 4 buttons (UP/DOWN/ENTER/BACK)
+#  and value editing for various parameter types.
+#
+#  @details Menu item types supported:
+#  - action: Triggers an action (e.g., START_CAPTURE)
+#  - numeric: Integer value with min/max/step constraints
+#  - choice: Selection from a list of options
+#  - datetime: Field-by-field date/time editing with offset tracking
+#  - wavelength_range: Dual-field min/max wavelength editing
+#  - fan_threshold: Fan temperature threshold with live temp display
+#  - info: Read-only display (WiFi SSID, IP address)
+#
+#  The menu tracks time offset (not absolute time) to preserve user-set
+#  time across system time changes. References are invalidated when
+#  spectrometer-affecting settings change.
 
 import pygame
 import datetime

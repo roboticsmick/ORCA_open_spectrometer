@@ -1,4 +1,18 @@
-# pysb-app/config.py
+## @file config.py
+#  @brief Centralized configuration module for the PySB-App spectrometer application.
+#
+#  This module contains all static application-wide constants including:
+#  - Asset paths (fonts, images)
+#  - Hardware feature flags and GPIO pin definitions
+#  - Display settings (screen dimensions, colors, fonts)
+#  - Timing constants (debounce, update intervals)
+#  - Spectrometer settings (integration time limits, scan averaging)
+#  - Auto-integration algorithm parameters
+#  - Plotting configuration (wavelength range, smoothing)
+#  - Mode definitions (lens types, collection modes, spectra types)
+#
+#  All values can be tuned here without modifying core application logic.
+#  Runtime-modifiable values (like wavelength range) are class attributes.
 
 import os
 
@@ -76,6 +90,10 @@ purposes. Dive in at your own risk!
 """
 
 
+## @brief Color definitions as RGB tuples for UI rendering.
+#
+#  All colors are defined as (R, G, B) tuples with values 0-255.
+#  Used throughout the UI for consistent styling.
 class COLORS:
     BLACK = (0, 0, 0)
     WHITE = (255, 255, 255)
@@ -88,6 +106,10 @@ class COLORS:
     MAGENTA = (255, 0, 255)
 
 
+## @brief Font size definitions in points for different UI elements.
+#
+#  Defines pixel sizes for text rendering in various UI contexts.
+#  Smaller sizes used for info/tick labels, larger for titles.
 class FONT_SIZES:
     TITLE = 22
     MENU_ITEM = 16
@@ -106,9 +128,11 @@ MENU_MARGIN_TOP = 38
 MENU_MARGIN_LEFT = 12
 
 
+## @brief Absolute file paths to TTF font files.
+#
+#  All paths are constructed from FONTS_DIR at module load time.
+#  ChakraPetch used for titles, Segoe UI variants for body text.
 class FONTS:
-    """Font file paths relative to the fonts directory."""
-
     TITLE = os.path.join(FONTS_DIR, "ChakraPetch-Medium.ttf")
     MAIN = os.path.join(FONTS_DIR, "Segoe UI This.ttf")
     HINT = os.path.join(FONTS_DIR, "Segoe UI This.ttf")
@@ -117,9 +141,11 @@ class FONTS:
     PLOTTER_TICK_LABEL = os.path.join(FONTS_DIR, "Segoe UI Semilight.ttf")
 
 
+## @brief Absolute file paths to image assets.
+#
+#  All paths are constructed from IMAGES_DIR at module load time.
+#  Used for splash screen and logo display.
 class IMAGES:
-    """Image file paths relative to the images directory."""
-
     LOGO = os.path.join(IMAGES_DIR, "logo.png")
     SPLASH = os.path.join(IMAGES_DIR, "logo.png")  # Same as logo for now
 
@@ -133,7 +159,15 @@ SPECTRO_LOOP_DELAY_S = 0.05
 DIVISION_EPSILON = 1e-9
 
 
-# --- SPECTROMETER ---
+## @brief Spectrometer hardware configuration and limits.
+#
+#  Contains integration time limits (menu and hardware), ADC resolution,
+#  and scan averaging parameters. HW_ prefixed values are device limits,
+#  others are menu/UI limits.
+#
+#  @details Integration time is specified in milliseconds for UI and
+#  microseconds for hardware communication. The spectrometer has a
+#  14-bit ADC (16383 max count).
 class SPECTROMETER:
     DEFAULT_INTEGRATION_TIME_MS = 1000
     MIN_INTEGRATION_TIME_MS = 100
@@ -151,7 +185,15 @@ class SPECTROMETER:
     SCANS_TO_AVERAGE_STEP = 1
 
 
-# --- AUTO_INTEGRATION ---
+## @brief Auto-integration algorithm parameters.
+#
+#  Controls the proportional feedback loop that automatically finds
+#  the optimal integration time by targeting 80-95% ADC saturation.
+#
+#  @details The algorithm uses proportional control with oscillation
+#  damping to converge on an integration time that produces peak
+#  ADC values within the target range. Stops after MAX_ITERATIONS
+#  or when at hardware limits.
 class AUTO_INTEGRATION:
     TARGET_LOW_PERCENT = 80.0
     TARGET_HIGH_PERCENT = 95.0
@@ -161,7 +203,15 @@ class AUTO_INTEGRATION:
     OSCILLATION_DAMPING_FACTOR = 0.5
 
 
-# --- PLOTTING ---
+## @brief Plotting and visualization configuration.
+#
+#  Controls live plot rendering including smoothing, Y-axis scaling,
+#  wavelength range cropping, and data decimation for performance.
+#
+#  @details WAVELENGTH_RANGE_*_NM values are runtime-modifiable via menu.
+#  Display cropping only affects visualization; saved data contains
+#  full spectrum. TARGET_DISPLAY_POINTS reduces 2048 sensor pixels
+#  to 300 for smooth 30+ FPS rendering.
 class PLOTTING:
     USE_LIVE_SMOOTHING = True
     LIVE_SMOOTHING_WINDOW_SIZE = 9
@@ -186,7 +236,16 @@ class PLOTTING:
     WAVELENGTH_EDIT_MIN_GAP_NM = 40  # Minimum gap between min and max wavelength
 
 
-# --- MODES ---
+## @brief Mode definitions for lens types, collection modes, and spectra types.
+#
+#  Defines string constants used throughout the application for:
+#  - Lens types: FIBER, CABLE, FIBER+CABLE (optical input configuration)
+#  - Collection modes: RAW (direct ADC counts), REFLECTANCE (calibrated ratio)
+#  - Spectra types: RAW, REFLECTANCE, DARK, WHITE, RAW_REFLECTANCE, AUTO_INTEG
+#
+#  @details RAW_REFLECTANCE is the raw target scan saved alongside reflectance
+#  data for scientific reproducibility. AUTO_INTEG marks test scans during
+#  auto-integration algorithm execution.
 class MODES:
     LENS_TYPE_FIBER = "FIBER"
     LENS_TYPE_CABLE = "CABLE"

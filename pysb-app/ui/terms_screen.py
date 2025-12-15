@@ -1,4 +1,9 @@
-# pysb-app/ui/terms_screen.py
+## @file terms_screen.py
+#  @brief Terms and conditions / disclaimer display screen.
+#
+#  Shows the application disclaimer text with optional auto-advance timeout.
+#  User can press A or B to continue, or wait for timeout if configured.
+#  Monitors leak detection flag for emergency exit.
 
 import time
 import pygame

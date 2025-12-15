@@ -1,4 +1,25 @@
-# pysb-app/main.py
+## @file main.py
+#  @brief Main entry point and application orchestrator for PySB-App spectrometer.
+#
+#  This module is the central coordinator for the spectrometer application.
+#  It manages:
+#  - Display initialization (framebuffer or windowed mode)
+#  - Global threading events (shutdown_flag, leak_detected_flag)
+#  - Shared data structures (SpectrometerSettings)
+#  - Component lifecycle (hardware controllers, UI screens, data manager)
+#  - Main UI state machine (MENU <-> SPECTROMETER states)
+#
+#  @details The application uses a multi-threaded architecture with
+#  queue-based communication between components. The main loop runs
+#  at ~30 FPS and handles state transitions based on user input.
+#
+#  Global Events:
+#  - shutdown_flag: Signals all threads to terminate gracefully
+#  - leak_detected_flag: Set by LeakSensor when leak is detected
+#
+#  State Machine:
+#  - MENU: Main menu for settings and navigation
+#  - SPECTROMETER: Live spectrometer view and capture workflow
 
 import threading
 from dataclasses import dataclass
@@ -41,17 +62,17 @@ white_reference_required = True
 # ==============================================================================
 
 
+## @brief Settings snapshot for spectrometer capture configuration.
+#
+#  Holds the current settings that control how the spectrometer captures data.
+#  Passed between the menu system (for editing) and spectrometer controller
+#  (for capture execution).
+#
+#  @var integration_time_ms Integration time in milliseconds (100-6000ms menu range).
+#  @var collection_mode Data collection mode: "RAW" or "REFLECTANCE".
+#  @var scans_to_average Number of scans to average (0-50, where 0 = no averaging).
 @dataclass
 class SpectrometerSettings:
-    """
-    A snapshot of the settings used for a specific capture.
-
-    Attributes:
-        integration_time_ms: Integration time in milliseconds (range: 10-10000)
-        collection_mode: Data collection mode ("RAW" or "REFLECTANCE")
-        scans_to_average: Number of scans to average (0-50, where 0 means no averaging)
-    """
-
     integration_time_ms: int = config.SPECTROMETER.DEFAULT_INTEGRATION_TIME_MS
     collection_mode: str = config.MODES.DEFAULT_COLLECTION_MODE
     scans_to_average: int = config.SPECTROMETER.DEFAULT_SCANS_TO_AVERAGE
@@ -62,13 +83,16 @@ class SpectrometerSettings:
 # ==============================================================================
 
 
+## @brief Initialize pygame display based on hardware configuration.
+#
+#  Creates either a framebuffer surface (for Adafruit PiTFT) or a
+#  standard pygame window (for development/SSH). Disables mouse
+#  cursor and console cursor blink in framebuffer mode.
+#
+#  @return pygame.Surface for rendering (SCREEN_WIDTH x SCREEN_HEIGHT).
+#  @pre Pygame must not be initialized before calling this function.
+#  @post Pygame is initialized and ready for rendering.
 def initialize_display():
-    """
-    Initializes the display based on hardware configuration.
-
-    Returns:
-        screen: pygame.Surface for rendering
-    """
     if config.HARDWARE["USE_ADAFRUIT_PITFT"]:
         # Adafruit PiTFT Mode: Framebuffer rendering
         print("Configuring Pygame for Adafruit PiTFT (framebuffer mode)...")
@@ -122,8 +146,25 @@ def initialize_display():
 # ==============================================================================
 
 
+## @brief Main application entry point and orchestrator.
+#
+#  Initializes all hardware controllers, UI screens, and background threads.
+#  Runs the main UI loop with state machine transitions between MENU and
+#  SPECTROMETER screens. Handles graceful shutdown on keyboard interrupt
+#  or leak detection.
+#
+#  @details Execution flow:
+#  1. Initialize display (framebuffer or window)
+#  2. Create shared queues for thread communication
+#  3. Instantiate hardware controllers and UI screens
+#  4. Start background threads (leak sensor, network, temp, spectrometer, data manager)
+#  5. Show splash screen and terms screen
+#  6. Enter main loop (state machine at ~30 FPS)
+#  7. Cleanup all resources on exit
+#
+#  @pre No other instance of the application should be running.
+#  @post All threads stopped, GPIO cleaned up, pygame quit.
 def main():
-    """Initializes all components, starts threads, and runs the main UI loop."""
     global dark_reference_required, white_reference_required
 
     # --- Display Initialization ---

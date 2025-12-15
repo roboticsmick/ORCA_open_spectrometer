@@ -1,4 +1,9 @@
-# pysb-app/hardware/network_info.py
+## @file network_info.py
+#  @brief Background network information fetcher for WiFi SSID and IP address.
+#
+#  Runs a daemon thread that periodically queries network status using
+#  system commands (iwgetid, hostname). Provides thread-safe access to
+#  WiFi name and IP address for display in the menu system.
 
 import subprocess
 import threading

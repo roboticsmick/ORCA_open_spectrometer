@@ -2,8 +2,8 @@
 
 This document provides a technical overview of the PySB-App, a Python-based spectrometer application designed for a Raspberry Pi with a touchscreen interface.
 
-**Last Updated:** 2025-12-14
-**Refactoring Status:** Phase 9 Complete (Temperature Sensor & Fan Control) ✅
+**Last Updated:** 2025-12-15
+**Refactoring Status:** Phase 9 Complete + Full Doxygen Documentation ✅
 
 ---
 
@@ -71,8 +71,8 @@ A central `main.py` module orchestrates the application, managing the overall st
 
 ```text
 pysb-app/
-├── main.py                      # ✅ Main entry point with dependency injection
-├── config.py                    # ✅ Centralized configuration with asset paths
+├── main.py                      # ✅ Main entry point with dependency injection (Doxygen ✓)
+├── config.py                    # ✅ Centralized configuration with asset paths (Doxygen ✓)
 ├── app_guide.md                 # ✅ This document (updated)
 ├── refactoring_goal.md          # ✅ Refactoring strategy document
 │
@@ -89,25 +89,25 @@ pysb-app/
 │   ├── Adafruit_Python_MCP9808/ # ✅ Temperature sensor library
 │   └── pyseabreeze/             # ✅ Spectrometer library
 │
-├── hardware/                    # ✅ Hardware abstraction layer
-│   ├── button_handler.py        # ✅ GPIO/Pygame input (⚠️ needs Doxygen docs)
-│   ├── leak_sensor.py           # ✅ Leak detection thread (has Doxygen docs)
-│   ├── network_info.py          # ✅ Network monitoring thread (has Doxygen docs)
-│   ├── temp_sensor.py           # ✅ Temperature sensor & fan control thread (has Doxygen docs)
-│   └── spectrometer_controller.py # ✅ Spectrometer control thread (has Doxygen docs)
+├── hardware/                    # ✅ Hardware abstraction layer (all files have Doxygen ✓)
+│   ├── button_handler.py        # ✅ GPIO/Pygame input (Doxygen ✓)
+│   ├── leak_sensor.py           # ✅ Leak detection thread (Doxygen ✓)
+│   ├── network_info.py          # ✅ Network monitoring thread (Doxygen ✓)
+│   ├── temp_sensor.py           # ✅ Temperature sensor & fan control thread (Doxygen ✓)
+│   └── spectrometer_controller.py # ✅ Spectrometer control thread (Doxygen ✓)
 │
-├── ui/                          # ✅ User interface components
-│   ├── display_utils.py         # ✅ Drawing utilities (has Doxygen docs)
-│   ├── splash_screen.py         # ✅ Splash screen (has Doxygen docs)
-│   ├── terms_screen.py          # ✅ Disclaimer screen (has Doxygen docs)
-│   ├── leak_warning.py          # ✅ Leak warning display
-│   ├── menu_system.py           # ✅ Menu system with datetime editing (has Doxygen docs)
-│   ├── plotting.py              # ✅ Plotting & rendering classes (has Doxygen docs)
-│   └── spectrometer_screen.py   # ✅ Live spectrometer view with save workflow
+├── ui/                          # ✅ User interface components (all files have Doxygen ✓)
+│   ├── display_utils.py         # ✅ Drawing utilities (Doxygen ✓)
+│   ├── splash_screen.py         # ✅ Splash screen (Doxygen ✓)
+│   ├── terms_screen.py          # ✅ Disclaimer screen (Doxygen ✓)
+│   ├── leak_warning.py          # ✅ Leak warning display (Doxygen ✓)
+│   ├── menu_system.py           # ✅ Menu system with datetime editing (Doxygen ✓)
+│   ├── plotting.py              # ✅ Plotting & rendering classes (Doxygen ✓)
+│   └── spectrometer_screen.py   # ✅ Live spectrometer view with save workflow (Doxygen ✓)
 │
-└── data/                        # ✅ Data management layer
+└── data/                        # ✅ Data management layer (all files have Doxygen ✓)
     ├── __init__.py              # ✅ Package init
-    └── data_manager.py          # ✅ File I/O, CSV operations, plot generation (has Doxygen docs)
+    └── data_manager.py          # ✅ File I/O, CSV operations, plot generation (Doxygen ✓)
 ```
 
 **Legend:**
@@ -1407,6 +1407,220 @@ Current Component Status:
 * [ ] MCP9808 sensor hardware testing (needs hardware)
 * [ ] Fan MOSFET control hardware testing (needs hardware)
 * [ ] Fan threshold adjustment hardware testing (needs hardware)
+
+---
+
+## 12. Complete API Reference
+
+This section provides a consolidated view of all classes, functions, and public methods across the application.
+
+### 12.1 Core Application (`main.py`)
+
+**Dataclass:**
+
+* `SpectrometerSettings` - Snapshot of capture settings (integration_time_ms, collection_mode, scans_to_average)
+
+**Functions:**
+
+* `initialize_display()` → pygame.Surface - Initialize framebuffer or window display
+* `main()` - Main entry point, orchestrates all components and state machine
+
+### 12.2 Configuration (`config.py`)
+
+**Classes:**
+
+* `COLORS` - RGB color tuples (BLACK, WHITE, RED, GREEN, BLUE, YELLOW, GRAY, CYAN, MAGENTA)
+* `FONT_SIZES` - Font sizes in points for UI elements
+* `FONTS` - Absolute paths to TTF font files
+* `IMAGES` - Absolute paths to image assets
+* `SPECTROMETER` - Hardware limits and menu ranges for integration time and averaging
+* `AUTO_INTEGRATION` - Proportional control algorithm parameters
+* `PLOTTING` - Visualization settings (smoothing, Y-axis, wavelength range)
+* `MODES` - Lens types, collection modes, and spectra type constants
+
+### 12.3 Hardware Layer
+
+#### ButtonHandler (`hardware/button_handler.py`)
+
+**Class:** `ButtonHandler`
+
+* `__init__()` - Initialize GPIO and keyboard input handling
+* `check_pygame_events()` - Poll pygame events (call once per frame)
+* `get_pressed(button_name)` → bool - Check and consume button press
+* `cleanup()` - Clean up GPIO resources
+
+#### LeakSensor (`hardware/leak_sensor.py`)
+
+**Class:** `LeakSensor(threading.Thread)`
+
+* `__init__(shutdown_flag, leak_detected_flag)` - Initialize with events
+* `run()` - Thread main loop (monitors GPIO for leak)
+* `cleanup()` - Clean up GPIO resources
+
+#### NetworkInfo (`hardware/network_info.py`)
+
+**Class:** `NetworkInfo`
+
+* `__init__(shutdown_flag)` - Initialize with shutdown event
+* `start()` - Start background update thread
+* `stop()` - Stop background thread
+* `get_wifi_name()` → str - Get cached WiFi SSID
+* `get_ip_address()` → str - Get cached IP address
+
+#### TempSensorInfo (`hardware/temp_sensor.py`)
+
+**Class:** `TempSensorInfo`
+
+* `__init__(shutdown_flag)` - Initialize sensor and fan GPIO
+* `start()` - Start temperature monitoring thread
+* `stop()` - Stop thread, turn off fan, cleanup GPIO
+* `get_temperature_c()` → float|str - Get current temperature or "N/A"
+* `is_fan_enabled()` → bool - Get current fan state
+* `get_fan_threshold_c()` → int - Get fan activation threshold
+* `set_fan_threshold_c(threshold)` - Set new fan threshold
+* `get_display_string()` → str - Get formatted string for menu
+
+#### SpectrometerController (`hardware/spectrometer_controller.py`)
+
+**Dataclasses:**
+
+* `SpectrometerCommand` - Command packet (command_type, integration_time_ms, scans_to_average, collection_mode, test_integration_us)
+* `SpectrometerResult` - Result packet (wavelengths, intensities, timestamp, is_valid, session_id, peak_adc_value, raw_intensities, etc.)
+
+**Class:** `SpectrometerController(threading.Thread)`
+
+* `__init__(shutdown_flag, request_queue, result_queue)` - Initialize with queues
+* `run()` - Thread main loop (processes commands, captures spectra)
+
+**Command Constants:**
+
+* `CMD_START_SESSION` - Start new capture session
+* `CMD_STOP_SESSION` - Pause capturing
+* `CMD_UPDATE_SETTINGS` - Update integration time and averaging
+* `CMD_CAPTURE_DARK_REF` - Capture dark reference
+* `CMD_CAPTURE_WHITE_REF` - Capture white reference
+* `CMD_SET_COLLECTION_MODE` - Set RAW or REFLECTANCE mode
+* `CMD_AUTO_INTEG_CAPTURE` - Capture for auto-integration
+* `CMD_SHUTDOWN` - Terminate thread
+
+### 12.4 UI Layer
+
+#### display_utils (`ui/display_utils.py`)
+
+**Functions:**
+
+* `draw_text(surface, text, font, color, rect, aa=True, bkg=None)` → int - Draw wrapped text, returns y-position
+* `draw_image_centered(screen, image_path, scale_dims=None, fallback_text="")` → bool - Load and center image
+* `update_display(screen)` - Update physical display (framebuffer or pygame.flip)
+
+#### splash_screen (`ui/splash_screen.py`)
+
+**Functions:**
+
+* `show(screen, leak_detected_flag)` - Display splash for configured duration
+
+#### terms_screen (`ui/terms_screen.py`)
+
+**Functions:**
+
+* `show(screen, button_handler, leak_detected_flag)` - Display disclaimer with button/timeout
+
+#### leak_warning (`ui/leak_warning.py`)
+
+**Functions:**
+
+* `show(screen)` - Display critical leak warning and wait 5 seconds
+
+#### MenuSystem (`ui/menu_system.py`)
+
+**Class:** `MenuSystem`
+
+* `__init__(screen, button_handler, settings, network_info, temp_sensor_info)` - Initialize menu
+* `handle_input()` → str|None - Process input, return "START_CAPTURE" or None
+* `draw()` - Render menu to screen
+* `get_current_display_time()` → datetime - Get current time with user offset
+
+**Menu Item Types:**
+
+* `action` - Triggers action (e.g., START_CAPTURE)
+* `numeric` - Integer with min/max/step
+* `choice` - Selection from list
+* `datetime` - Field-by-field date/time editing
+* `wavelength_range` - Dual-field min/max wavelength
+* `fan_threshold` - Fan threshold with live temperature display
+* `info` - Read-only display (WiFi, IP)
+
+#### plotting (`ui/plotting.py`)
+
+**Functions:**
+
+* `crop_wavelength_range(wavelengths, intensities, min_wl, max_wl)` → tuple - Crop to wavelength range
+* `decimate_spectral_data_for_display(wavelengths, intensities, target_points)` → tuple - Reduce points for display
+* `apply_fast_smoothing(intensities, window_size)` → ndarray - Apply convolution smoothing
+* `prepare_display_data(wavelengths, intensities, display_width, apply_smoothing, smoothing_window)` → tuple - Complete pipeline
+
+**Class:** `OptimizedPygamePlotter`
+
+* `__init__(parent_surface, plot_widget_rect, ...)` - Initialize with display parameters
+* `set_x_data_static(x_data)` - Set wavelength data
+* `set_y_data(y_data)` - Set intensity data
+* `set_y_limits(y_min, y_max)` - Set Y-axis display range
+* `set_y_label(label)` - Set Y-axis label text
+* `set_y_tick_format(format_str)` - Set Y tick format string
+* `draw()` - Draw complete plot to parent surface
+* `get_performance_stats()` → dict - Get rendering statistics
+* `clear_data()` - Clear all plot data
+
+**Class:** `FastSpectralRenderer`
+
+* `__init__(parent_surface, plot_rect, target_fps, max_display_points)` - Initialize renderer
+* `set_wavelengths(wavelengths)` - Set wavelength data
+* `update_spectrum(intensities, apply_smoothing, force_update)` → bool - Update spectrum data
+* `draw()` - Draw spectrum plot
+* `set_y_limits(y_min, y_max)` - Set Y-axis limits
+* `set_y_label(label)` - Set Y-axis label
+* `set_y_tick_format(format_str)` - Set Y tick format
+* `get_performance_info()` → dict - Get FPS and timing info
+* `configure_smoothing(enabled, window_size)` - Configure smoothing parameters
+
+#### SpectrometerScreen (`ui/spectrometer_screen.py`)
+
+**Class:** `SpectrometerScreen`
+
+* `__init__(screen, button_handler, settings, request_queue, result_queue, save_queue)` - Initialize screen
+* `enter()` - Called when entering screen (starts session)
+* `exit()` - Called when exiting screen (stops session)
+* `handle_input()` → str|None - Process input, return "MENU" or None
+* `update()` - Process results from controller queue
+* `draw()` - Render screen (plot, status, hints)
+
+**Screen States:**
+
+* `STATE_LIVE_VIEW` - Live spectral display
+* `STATE_FROZEN` - Frozen for capture/save
+* `STATE_CALIBRATION_MENU` - Calibration type selection
+* `STATE_LIVE_DARK_REF` / `STATE_LIVE_WHITE_REF` - Reference capture live view
+* `STATE_FROZEN_DARK_REF` / `STATE_FROZEN_WHITE_REF` - Reference frozen for save/discard
+* `STATE_AUTO_INTEG_SETUP` / `STATE_AUTO_INTEG_RUNNING` / `STATE_AUTO_INTEG_CONFIRM` - Auto-integration workflow
+
+### 12.5 Data Layer
+
+#### DataManager (`data/data_manager.py`)
+
+**Dataclass:**
+
+* `SaveRequest` - Save packet (wavelengths, intensities, timestamp, integration_time_ms, scans_to_average, spectra_type, collection_mode, lens_type, temperature_c, raw_intensities_for_reflectance)
+
+**Class:** `DataManager(threading.Thread)`
+
+* `__init__(shutdown_flag, save_queue)` - Initialize with events and queue
+* `run()` - Thread main loop (processes save requests)
+
+**File Organization:**
+
+* Daily folders: `~/pysb-app/spectra_data/YYYY-MM-DD/`
+* CSV files: `YYYY-MM-DD_spectra_log.csv`
+* PNG plots: `spectrum_{TYPE}_{LENS}_{TIMESTAMP}.png`
 
 ---
 

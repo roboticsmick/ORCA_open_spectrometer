@@ -1,4 +1,8 @@
-# pysb-app/ui/splash_screen.py
+## @file splash_screen.py
+#  @brief Application startup splash screen with logo display.
+#
+#  Shows the application logo centered on screen for a configurable duration.
+#  Monitors leak detection flag for emergency exit during splash display.
 
 import time
 import pygame

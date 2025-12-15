@@ -1,4 +1,9 @@
-# pysb-app/ui/display_utils.py
+## @file display_utils.py
+#  @brief Common display utilities for text rendering and display updates.
+#
+#  Provides helper functions for text wrapping, image loading, and display
+#  updates. Handles both Adafruit PiTFT framebuffer mode (RGB565) and
+#  standard pygame window mode transparently.
 
 import os
 import pygame

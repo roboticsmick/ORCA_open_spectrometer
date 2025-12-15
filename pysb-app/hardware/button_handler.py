@@ -1,4 +1,9 @@
-# pysb-app/hardware/button_handler.py
+## @file button_handler.py
+#  @brief Unified button input handler for GPIO and keyboard events.
+#
+#  Manages all button inputs from GPIO pins (Pimoroni Display HAT, Adafruit PiTFT,
+#  or external Hall effect sensors) and Pygame keyboard events. Provides thread-safe
+#  button state management with configurable debouncing.
 
 import time
 import threading

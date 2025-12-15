@@ -1,4 +1,16 @@
-# pysb-app/ui/spectrometer_screen.py
+## @file spectrometer_screen.py
+#  @brief Live spectrometer view screen with capture and calibration workflows.
+#
+#  This module provides the main spectrometer interface for real-time spectral
+#  visualization at ~30 FPS. It implements a state machine for:
+#  - Live view (RAW and REFLECTANCE modes)
+#  - Freeze/capture workflow for saving spectra
+#  - Dark/white reference calibration
+#  - Auto-integration algorithm for optimal integration time
+#
+#  @details Uses queue-based communication with SpectrometerController thread.
+#  Session-based validity tracking ensures only fresh scans are displayed.
+#  Reference captures always use RAW mode regardless of collection mode setting.
 
 """
 Spectrometer Screen - Live Spectral Data Visualization

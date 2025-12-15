@@ -1,6 +1,3 @@
-# pysb-app/data/data_manager.py
-
-"""
 ## @file data_manager.py
 #  @brief Data Manager Thread for saving spectral data to CSV and generating plots.
 #
@@ -8,14 +5,13 @@
 #  for spectral data. It processes save requests from the UI thread and writes
 #  data to CSV files with daily folder organization.
 #
-#  Key Features:
+#  @details Key Features:
 #  - Daily folder organization (DATA_DIR/YYYY-MM-DD/)
 #  - CSV file with header row (wavelengths as column headers)
 #  - Matplotlib plot generation for saved spectra
 #  - Thread-safe queue-based communication
 #  - Support for RAW, REFLECTANCE, DARK, WHITE spectra types
 #  - Saves raw intensities alongside reflectance when in reflectance mode
-"""
 
 import threading
 import queue

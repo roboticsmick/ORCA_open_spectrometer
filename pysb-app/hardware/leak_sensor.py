@@ -1,4 +1,9 @@
-# pysb-app/hardware/leak_sensor.py
+## @file leak_sensor.py
+#  @brief Leak sensor monitoring using GPIO interrupt-based detection.
+#
+#  Monitors a leak sensor connected to a GPIO pin and triggers an alert
+#  when liquid is detected. Uses interrupt-driven detection for efficiency.
+#  Sets the leak_detected_flag event to trigger emergency shutdown.
 
 import threading
 import time
