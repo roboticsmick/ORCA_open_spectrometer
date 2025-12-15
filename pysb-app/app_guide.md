@@ -381,12 +381,13 @@ Manages MCP9808 temperature sensor readings and automatic fan control in a backg
 
 **Features:**
 
-* MCP9808 I2C temperature sensor support via Adafruit library
+* MCP9808 I2C temperature sensor support via smbus2 (no external Adafruit libraries needed)
 * Automatic fan control based on configurable temperature threshold
 * MOSFET-controlled fan via GPIO pin (default: GPIO 4)
 * Thread-safe temperature and fan state access
 * Graceful degradation if sensor unavailable (fan still controllable)
 * Runtime threshold adjustment via menu
+* Diagnostic test script: `test_temp_sensor.py`
 
 **Fan Control Logic:**
 
@@ -431,11 +432,13 @@ MCP9808 VCC     -> 3.3V
 MCP9808 GND     -> Ground
 ```
 
-**Library Path (Raspberry Pi):**
+**Dependencies:**
 
-```text
-/home/pi/pysb-app/lib/Adafruit_Python_MCP9808/MCP9808.py
-```
+* `smbus2` - Python I2C library (installed via pip in venv)
+* `RPi.GPIO` - GPIO control for fan MOSFET
+
+**Note:** The Adafruit_Python_MCP9808 library in `lib/` is no longer used.
+The temp_sensor.py module communicates directly with the MCP9808 via smbus2.
 
 ### 5.5 SpectrometerController (`hardware/spectrometer_controller.py`)
 
@@ -1278,11 +1281,12 @@ A:White | X:Dark | Y:Auto | B:Back
 
 1. **TempSensorInfo Class (`hardware/temp_sensor.py`)**
    * Background thread for temperature monitoring (10-second interval)
-   * MCP9808 I2C temperature sensor via Adafruit library
+   * MCP9808 I2C temperature sensor via smbus2 (no Adafruit dependencies)
    * MOSFET-controlled fan on GPIO 4
    * Automatic fan activation when temp >= threshold
    * Thread-safe access to temperature, fan state, threshold
    * Graceful degradation if sensor unavailable
+   * Diagnostic test script: `test_temp_sensor.py`
 
 2. **Fan Control Configuration (`config.py`)**
    * `FAN_ENABLE_PIN = 4` - MOSFET gate GPIO pin

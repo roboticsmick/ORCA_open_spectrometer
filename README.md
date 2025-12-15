@@ -1,361 +1,476 @@
 # ORCA Open Spectrometer
 
-This library allows you to use the Ocean Optics ST-VIS range of spectrometers using a Raspberry Pi Zerro 2W and a LCD display to view spectra using the Seabreeze API. This allows for a very small low power package that can easily be integrated into a small handheld device for field work. 
+A portable, low-power spectrometer system using Ocean Optics ST-VIS spectrometers with a Raspberry Pi Zero 2W and touchscreen display. Designed for field work and scientific research.
 
-Lots of love to the the people working on keeping the PySeabreeze API alive. This let me get the Ocena Optic Spectrometer working on an ARM device. 
+Built on the [PySeabreeze](https://github.com/ap--/python-seabreeze) library.
 
-## Installing Pyseabreeze on Ubuntu PC for testing the spectrometer
+---
 
-```sh
-cd
-mkdir pysb
-cd pysb
-python3 -m venv --system-site-packages venv
-source venv/bin/activate
-pip install seabreeze[pyseabreeze]
-seabreeze_os_setup
-```
+## Quick Start Guide
 
-## Raspberry Pi Spectrometer Setup with Adafruit PiTFT 2.8"
+This guide will help you set up a Raspberry Pi Zero 2W from scratch. Follow each step in order.
 
-Automated setup for a Raspberry Pi Zero 2 W with Ubuntu 22.04 Server LTS, Adafruit PiTFT 2.8" display, and pyseabreeze spectrometer integration.
+**Estimated time:** 30-45 minutes (mostly waiting for installations)
 
-## Hardware Requirements
+---
 
-- Raspberry Pi Zero 2 W
+## Step 1: What You Need
+
+### Hardware
+
+- Raspberry Pi Zero 2W
 - Adafruit PiTFT 2.8" Resistive Touchscreen (Product ID: 1601)
-- High-quality microSD card (128GB Samsung PRO Plus recommended)
-- DS3231 RTC module (optional but recommended)
-- Ocean Optics compatible spectrometer
+- High-quality microSD card (32GB or larger, Class 10 or better)
+- Ocean Optics compatible spectrometer (ST-VIS series)
+- USB power supply (2.5A recommended)
+- A computer with an SD card reader
 
-## Initial Setup: Flash Ubuntu 22.04 Server LTS
+### Optional Hardware
 
-### 1. Install Raspberry Pi Imager
+- DS3231 RTC module (keeps time when powered off)
+- MCP9808 temperature sensor
+- Cooling fan with MOSFET control
+- Custom PCB (see Hardware section below)
+
+### Software (on your computer)
+
+- Raspberry Pi Imager - [Download here](https://www.raspberrypi.com/software/)
+- SSH client (built into Mac/Linux, use PuTTY on Windows)
+
+---
+
+## Step 2: Flash Ubuntu to the SD Card
+
+### 2.1 Install Raspberry Pi Imager
+
+**On Ubuntu/Debian:**
 
 ```bash
 sudo apt install rpi-imager
 ```
 
-### 2. Flash the Operating System
+**On other systems:** Download from <https://www.raspberrypi.com/software/>
 
-**Hardware Configuration:**
-- **Device:** Raspberry Pi Zero 2 W
-- **OS:** Ubuntu 22.04 Server LTS
-- **Storage:** Use a high-quality microSD card (don't skimp on quality)
+### 2.2 Flash the Operating System
 
-**Imager Settings:**
-1. Click `Edit Settings` before flashing
-2. **General Tab:**
-   - Hostname: `rpi`
-   - Username: `pi`
-   - Password: `spectro`
-   - Configure wireless LAN: ✓
-     - SSID: Your WiFi network name (mobile hotspot recommended for field use)
-     - Password: Your WiFi password
-     - Wireless LAN country: `AU` (or your country)
-   - Set locale settings: ✓
-     - Timezone: `Australia/Brisbane` (or your timezone)
-     - Keyboard layout: `US`
-3. **Services Tab:**
-   - Enable SSH: ✓ (Use password authentication)
-4. Click `Save`
-5. Confirm OS customization settings when prompted
-6. Flash the image to your microSD card
+1. Insert your microSD card into your computer
+2. Open **Raspberry Pi Imager**
+3. Click **"Choose Device"** → Select **Raspberry Pi Zero 2 W**
+4. Click **"Choose OS"** → Select **Other general-purpose OS** → **Ubuntu** → **Ubuntu Server 22.04 LTS (64-bit)**
+5. Click **"Choose Storage"** → Select your microSD card
+6. Click **"Next"**
 
-## First Boot and Connection
+### 2.3 Configure Settings (Important!)
 
-### 1. Initial Boot
-- Enable your mobile phone hotspot (if using mobile hotspot for WiFi)
-- Insert the flashed microSD card into the Raspberry Pi
-- Power on the Raspberry Pi
-- Wait for the device to connect to your WiFi network
+When prompted "Would you like to apply OS customization settings?", click **"Edit Settings"**
 
-### 2. Find the Pi's IP Address
+**General Tab:**
 
-**Option A: Using hostname (if available)**
+| Setting | Value |
+|---------|-------|
+| Set hostname | `rpi` |
+| Set username and password | Username: `pi`, Password: `spectro` |
+| Configure wireless LAN | Check this box |
+| SSID | Your WiFi network name |
+| Password | Your WiFi password |
+| Wireless LAN country | Your country code (e.g., `AU`, `US`, `GB`) |
+| Set locale settings | Check this box |
+| Time zone | Your timezone (e.g., `Australia/Brisbane`) |
+| Keyboard layout | `us` |
+
+**Services Tab:**
+
+| Setting | Value |
+|---------|-------|
+| Enable SSH | Check this box |
+| Use password authentication | Select this option |
+
+1. Click **"Save"**
+2. Click **"Yes"** to apply OS customization
+3. Click **"Yes"** to confirm and start writing
+4. Wait for the write and verification to complete
+5. Remove the SD card when prompted
+
+---
+
+## Step 3: First Boot
+
+1. Insert the microSD card into the Raspberry Pi
+2. Connect the PiTFT display (if not already connected)
+3. Make sure your WiFi network is available (turn on your phone hotspot if using that)
+4. Connect power to the Raspberry Pi
+5. Wait 2-3 minutes for the first boot to complete
+
+---
+
+## Step 4: Connect via SSH
+
+You need to connect to the Pi from your computer to run the setup.
+
+### 4.1 Find the Pi's IP Address
+
+**Option A - Try the hostname first:**
+
 ```bash
 ping rpi.local
 ```
 
-**Option B: Network scan (if hostname doesn't work)**
-```bash
-# Check your laptop's IP address when connected to the same network
-ifconfig
-# Look for your interface (e.g., wlp3s0) and note the network
-# Example: inet 10.119.124.83 means network is 10.119.124.0/24
+If you see replies with an IP address, use that IP.
 
-# Scan the network
-nmap -sn 10.119.124.0/24
+**Option B - Scan your network:**
+
+On Linux/Mac:
+
+```bash
+# First, find your network range
+ip addr show | grep "inet "
+# Look for something like: inet 192.168.1.50/24
+# Your network is 192.168.1.0/24
+
+# Scan for devices
+nmap -sn 192.168.1.0/24
+# Look for "Raspberry Pi" in the results
 ```
 
-### 3. SSH into the Raspberry Pi
+**Option C - Check your router's admin page:**
+Log into your router and look for connected devices named "rpi"
+
+### 4.2 Connect via SSH
+
 ```bash
 ssh pi@<IP_ADDRESS>
 ```
-Enter password: `spectro`
 
-**Note:** Both your laptop and Raspberry Pi must be on the same network for SSH to work.
+Replace `<IP_ADDRESS>` with the actual IP (e.g., `ssh pi@192.168.1.100`)
 
-## Adding Additional WiFi Networks (Optional)
+When prompted:
 
-If you need to add more WiFi networks after initial setup:
+- Type `yes` to accept the host key (first time only)
+- Enter password: `spectro`
 
-1. Insert the microSD card into your computer
-2. Navigate to the boot partition and edit the network configuration:
-   ```bash
-   sudo nano /path/to/boot/50-cloud-init.yaml
-   ```
-3. Add additional networks to the configuration:
-   ```yaml
-   network:
-       version: 2
-       wifis:
-           renderer: networkd
-           wlan0:
-               access-points:
-                   existing_network:
-                       password: existing_password
-                   new_network:
-                       password: new_password
-               dhcp4: true
-               optional: true
-   ```
-4. Save and safely eject the microSD card
-5. Reinsert into the Pi and power on
+**You should now see a command prompt like:** `pi@rpi:~$`
 
-## Automated Setup
+---
 
-### 1. Download and Run the Setup Script
+## Step 5: Download the Spectrometer Software
+
+Run these commands on the Raspberry Pi (via SSH):
 
 ```bash
-# Download the setup script
-wget https://raw.githubusercontent.com/yourusername/yourrepo/main/setup_ada.sh
+# Install git (if not already installed)
+sudo apt update && sudo apt install -y git
 
-# Make it executable
-chmod +x setup_ada.sh
+# Download the spectrometer software
+cd ~
+git clone https://github.com/USER/ORCA_open_spectrometer.git
 
-# Run the setup (requires sudo)
-sudo ./setup_ada.sh
+# Navigate to the application folder
+cd ORCA_open_spectrometer/pysb-app
 ```
 
-### 2. What the Setup Script Does
+> **Note:** Replace `USER` with the actual GitHub username/organization for this repository.
 
-The automated setup script handles:
+---
 
-- **System Configuration:**
-  - System package updates and installation
-  - Swap file configuration (2GB)
-  - SPI and I2C interface enabling
-  - User group permissions for hardware access
+## Step 6: Run the Setup Script
 
-- **Display Setup:**
-  - Adafruit PiTFT 2.8" driver installation and configuration
-  - Console cursor control permissions for application use
-  - Display rotation and framebuffer configuration
+This script will install everything automatically. It takes about 20-30 minutes.
 
-- **Python Environment:**
-  - Virtual environment creation (`~/pysb-app/pysb_venv/`)
-  - Integrated package installation (no separate requirements.txt needed):
-    - numpy, pyusb (core dependencies)
-    - matplotlib, pygame, pygame-menu (UI)
-    - spidev, RPi.GPIO, rpi-lgpio (hardware interfaces)
-    - seabreeze[pyseabreeze] (spectrometer support)
+```bash
+# Make the script executable
+chmod +x setup_pi.sh
 
-- **Hardware Configuration:**
-  - DS3231 RTC module setup (if connected)
-  - Seabreeze udev rules for spectrometer access
-  - Terminal and bash improvements
+# Run the setup script
+sudo ./setup_pi.sh
+```
 
-### 3. Reboot Required
+**What the setup script does:**
 
-After the setup script completes:
+- Updates the system packages
+- Installs the PiTFT display driver
+- Sets up the Python environment
+- Installs the spectrometer libraries
+- Configures I2C for temperature sensor
+- Optimizes boot time (reduces from 2+ minutes to ~20 seconds)
+- Sets up user permissions for hardware access
+
+**During setup:**
+
+- The script will ask a few questions - just press Enter for defaults
+- If asked about creating a systemd service, type `n` (unless you want auto-start)
+- The display driver installation may show warnings - this is normal
+
+---
+
+## Step 7: Reboot
+
+After the setup script completes, you must reboot:
 
 ```bash
 sudo reboot
 ```
 
-**Important:** The reboot is required for display drivers, hardware interfaces, and user permissions to take full effect.
-
-## Running Your Application
-
-After reboot, SSH back into the Pi and run your application:
+Wait about 30 seconds, then reconnect via SSH:
 
 ```bash
-# Navigate to project directory
+ssh pi@<IP_ADDRESS>
+```
+
+---
+
+## Step 8: Run the Spectrometer Application
+
+```bash
+# Navigate to the project folder
 cd ~/pysb-app
 
-# Activate the virtual environment
+# Activate the Python environment
 source pysb_venv/bin/activate
 
-# Run your application
+# Run the application
 python3 main.py
 ```
 
-## Project File Structure
+The application should now start and display on the PiTFT screen!
 
-After setup, your project directory will contain:
+---
 
-```
-~/pysb-app/
-├── pysb_venv/           # Python virtual environment
-├── main.py              # Your main application (copy this file to the Pi)
-├── assets/              # Fonts, images, etc. (copy this directory to the Pi)
-└── lib/                 # Additional libraries (if needed)
-```
+## Using the Spectrometer
 
-## Copying Your Application Files
+### Button Controls
 
-You'll need to copy your `main.py` and `assets/` directory to the Pi:
+| Button | Function |
+|--------|----------|
+| **X** (top) | Navigate up / Increase value |
+| **Y** (bottom) | Navigate down / Decrease value |
+| **A** | Select / Confirm / Start capture |
+| **B** | Back / Cancel |
+
+### Menu Options
+
+- **Integration Time:** How long the sensor collects light (longer = more signal)
+- **Scans to Average:** Number of readings to average (more = smoother data)
+- **Collection Mode:** RAW (raw counts) or REFLECTANCE (calibrated %)
+- **Plot Range:** Wavelength range to display
+- **Fan:** Temperature threshold for cooling fan
+
+### Taking Measurements
+
+1. Select **"Start Capture"** from the menu
+2. For reflectance mode, you'll be prompted to capture:
+   - **Dark reference** (cover the sensor)
+   - **White reference** (measure a white standard)
+3. Press **A** to capture spectra
+4. Data is automatically saved to the SD card
+
+---
+
+## Troubleshooting
+
+### Can't connect via SSH
+
+- Make sure both devices are on the same WiFi network
+- Wait a full 3 minutes after powering on for first boot
+- Try using the IP address instead of `rpi.local`
+- Check that WiFi credentials in Step 2.3 are correct
+
+### Display not working after reboot
+
+- Ensure the display ribbon cable is firmly connected
+- Re-run the setup script if needed
+- Check that you completed the full reboot
+
+### Spectrometer not detected
+
+- Unplug and replug the spectrometer USB cable
+- Run: `lsusb` to check if it appears
+- Try a different USB cable or port
+
+### Temperature sensor shows "N/A"
+
+- Check I2C wiring (SDA→GPIO2, SCL→GPIO3)
+- Run the diagnostic: `python3 test_temp_sensor.py`
+- Verify I2C is enabled: `sudo i2cdetect -y 1`
+
+### Application crashes or errors
+
+- Make sure the virtual environment is activated: `source pysb_venv/bin/activate`
+- Check you're in the correct directory: `cd ~/pysb-app`
+- View error logs for details
+
+---
+
+## Testing Hardware Components
+
+### Test Temperature Sensor (MCP9808)
 
 ```bash
-# From your development machine, copy files to the Pi
-scp main.py pi@<PI_IP>:~/pysb-app/
-scp -r assets/ pi@<PI_IP>:~/pysb-app/
+cd ~/pysb-app
+source pysb_venv/bin/activate
+python3 test_temp_sensor.py
 ```
 
-## Testing and Verification
+### Test I2C Devices
 
-### Test Spectrometer Connection
+```bash
+sudo i2cdetect -y 1
+```
+
+You should see:
+
+- `18` = MCP9808 temperature sensor
+- `68` = DS3231 RTC
+
+### Test Spectrometer
+
 ```bash
 cd ~/pysb-app
 source pysb_venv/bin/activate
 python -m seabreeze.cseabreeze_backend ListDevices
 ```
 
-### Test RTC (if installed)
+### Test RTC
+
 ```bash
 sudo hwclock -r
 ```
 
-### Test Display Cursor Control
-```bash
-# Disable cursor blinking (should work without permission errors)
-echo 0 > /sys/class/graphics/fbcon/cursor_blink
+---
+
+## File Locations
+
+After setup, files are located at:
+
+```text
+~/pysb-app/
+├── main.py              # Main application
+├── config.py            # Configuration settings
+├── pysb_venv/           # Python virtual environment
+├── hardware/            # Hardware control modules
+├── ui/                  # User interface modules
+├── data/                # Data management modules
+├── assets/              # Fonts and images
+└── lib/                 # Additional libraries
 ```
 
-### Test SPI Interface
+Captured spectra are saved to: `~/pysb-app/data/` (or as configured)
+
+---
+
+## Adding Additional WiFi Networks
+
+If you need to add more WiFi networks later:
+
+1. SSH into the Pi
+2. Edit the network configuration:
+
+   ```bash
+   sudo nano /etc/netplan/50-cloud-init.yaml
+   ```
+
+3. Add your network under `access-points`:
+
+   ```yaml
+   network:
+       version: 2
+       wifis:
+           wlan0:
+               access-points:
+                   "Existing_Network":
+                       password: "existing_password"
+                   "New_Network":
+                       password: "new_password"
+               dhcp4: true
+   ```
+
+4. Save (Ctrl+O, Enter) and exit (Ctrl+X)
+5. Apply changes: `sudo netplan apply`
+
+---
+
+## Hardware Documentation
+
+### Custom PCB
+
+A custom PCB was designed to add:
+
+- USB-C power input
+- Blue Robotics waterproof power switch
+- Real-time clock (DS3231) with battery backup
+- Leak sensor input
+- Button inputs
+- I2C and UART breakouts
+
+The complete schematic and board design can be found in the `PCB/` folder.
+
+![PCB Front](https://github.com/user-attachments/assets/a64ad8f9-ed21-4b6f-b43d-9462d401118d)
+
+![PCB Back](https://github.com/user-attachments/assets/7c0f146f-47bb-43a3-b808-453892763aac)
+
+### Leak Sensor
+
+Based on the Blue Robotics leak sensor design, using Blue Robotics SOS leak sensor probes.
+
+![Leak Sensor](https://github.com/user-attachments/assets/3c34cd6f-63d9-44bc-a1fa-a32ff59414d8)
+
+### RTC Module
+
+Based on Adafruit's I2C DS3231 module design.
+
+![RTC Module](https://github.com/user-attachments/assets/7edfee91-a727-4598-ba51-139883b82f8c)
+
+### Wiring Reference
+
+| Component | Raspberry Pi Pin |
+|-----------|------------------|
+| **I2C SDA** | GPIO 2 (Pin 3) |
+| **I2C SCL** | GPIO 3 (Pin 5) |
+| **Fan Control** | GPIO 4 (Pin 7) |
+| **Button A** | GPIO 27 |
+| **Button B** | GPIO 23 |
+| **Button X** | GPIO 22 |
+| **Button Y** | GPIO 17 |
+| **Leak Sensor** | GPIO 26 |
+
+---
+
+## Power Consumption
+
+Using a 10000mAh battery pack, the system runs for approximately **10 hours** under typical use.
+
+| Measurement | Value |
+|-------------|-------|
+| Current (live feed) | ~0.6A |
+| Voltage | 5.1V |
+| Power consumption | 3.06W |
+| Battery capacity | 37Wh (10000mAh × 3.7V) |
+| Efficiency | ~85% |
+| Runtime | ~10.3 hours |
+
+---
+
+## Testing on Ubuntu PC (Development)
+
+To test the spectrometer on a regular Ubuntu PC (without the Pi):
+
 ```bash
-ls -l /dev/spidev*
-```
-
-## Disable services for faster bootup
-
-To reduce boot time from 2+ minutes to ~20 seconds while keeping WiFi configuration.
-
-```bash
-# These are the slow, cloud-specific services
-sudo systemctl disable cloud-config.service
-sudo systemctl disable cloud-final.service
-sudo systemctl mask cloud-config.service
-sudo systemctl mask cloud-final.service
-
-# Disable all snap services
-sudo systemctl disable snapd.service
-sudo systemctl disable snapd.socket
-sudo systemctl disable snapd.seeded.service
-sudo systemctl mask snapd.service
-sudo systemctl mask snapd.socket
-sudo systemctl mask snapd.seeded.service
-sudo systemctl mask snap.lxd.activate.service
-
-# Disable network-wait 
-sudo systemctl disable NetworkManager-wait-online.service
-sudo systemctl mask NetworkManager-wait-online.service
-
-# Reboot
-sudo reboot
-```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **SSH Connection Failed:**
-   - Ensure both devices are on the same network
-   - Try using IP address instead of hostname
-   - Check that SSH is enabled in the Pi configuration
-
-2. **Display Not Working:**
-   - Ensure reboot was completed after setup
-   - Check that the display is properly connected
-   - Verify that the PiTFT installer completed successfully
-
-3. **Spectrometer Not Detected:**
-   - Check USB connection
-   - Verify udev rules: `ls /etc/udev/rules.d/*ocean*`
-   - Test with: `lsusb` to see if device is detected
-
-4. **Python Package Import Errors:**
-   - Ensure virtual environment is activated
-   - Reinstall specific packages: `pip install <package_name>`
-
-### Manual Fixes
-
-If automatic setup fails for any component, you can run individual steps manually:
-
-```bash
-cd ~/pysb-app
-source pysb_venv/bin/activate
-
-# Reinstall specific Python packages
-pip install matplotlib pygame pygame-menu
-
-# Reinstall seabreeze
+cd ~
+mkdir pysb-dev
+cd pysb-dev
+python3 -m venv --system-site-packages venv
+source venv/bin/activate
 pip install seabreeze[pyseabreeze]
-
-# Reset udev rules for seabreeze
-sudo seabreeze_os_setup
+seabreeze_os_setup
 ```
 
-## Hardware Notes
-
-- **Power:** Use a quality power supply (2.5A recommended for Pi Zero 2 W with display)
-- **microSD:** Use Class 10 or better, avoid cheap/counterfeit cards
-- **Display:** Ensure proper connection of the PiTFT ribbon cable
-- **RTC:** Connect DS3231 to I2C pins (SDA to GPIO 2, SCL to GPIO 3, VCC to 3.3V, GND to GND)
-
-## Development Tips
-
-- Use `screen` or `tmux` for persistent SSH sessions
-- The setup script adds helpful bash aliases and history search
-- Log files are typically in `/var/log/` for troubleshooting
-- Use `dmesg` to check for hardware detection issues
+---
 
 ## License
 
-This setup is designed for educational and research purposes. Please ensure compliance with all applicable licenses for the software components used.
+This project is designed for educational and research purposes. Please ensure compliance with all applicable licenses for the software components used.
 
-## Raspberry Pi breakout PCB
+---
 
-A custom PCB was built to add a USB-C power input, Blue Robotics waterproof power switch, real time clock (RTC) and battery, leak sensor and button inputs. An I2C and UART breakout was also added just for fun.
+## Acknowledgments
 
-This complete schematic and board design can be found in the PCB folder. 
-
-![image](https://github.com/user-attachments/assets/a64ad8f9-ed21-4b6f-b43d-9462d401118d)
-
-![image](https://github.com/user-attachments/assets/7c0f146f-47bb-43a3-b808-453892763aac)
-
-Leak sensor is based on the Blue Robotics leak sensor and uses Blue Robotics SOS leak sensor probes.
-
-![image](https://github.com/user-attachments/assets/3c34cd6f-63d9-44bc-a1fa-a32ff59414d8)
-
-RTC is based on Adafruit's I2C DS3231 module.
-
-![image](https://github.com/user-attachments/assets/7edfee91-a727-4598-ba51-139883b82f8c)
-
-## Power Usage:
-
-Using a 10000mAh battery pack, the Raspberry Pi and spectrometer setup for approximately 10 hours and 18 minutes under the current load conditions.
-
-Current during spectrometer live feed: ~0.6A 
-Voltage: 5.099V
-Power consumption = Voltage × Current
-Power consumption = 5.099V × 0.6A = 3.06W
-Energy capacity = 10000mAh × 3.7V ÷ 1000 = 37Wh
-Assuming a typical efficiency rate: 85%
-Actual available energy = 37Wh × 0.85 = 31.45Wh
-Runtime = Available energy ÷ Power consumption
-Runtime = 31.45Wh ÷ 3.06W ≈ 10.3 hours
-
-
-
+Thanks to the [python-seabreeze](https://github.com/ap--/python-seabreeze) team for maintaining the PySeabreeze API, which makes this project possible on ARM devices.

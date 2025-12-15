@@ -2,26 +2,11 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-# ============================================================================
-# PySB-App Setup Script for Raspberry Pi Zero 2W
-# ============================================================================
-# This script sets up a complete spectrometer application environment including:
-# - System packages and Python virtual environment
-# - Adafruit PiTFT 2.8" display driver
-# - Seabreeze spectrometer library (from local lib/ folder)
-# - MCP9808 temperature sensor support via I2C
-# - Fan control via GPIO
-# - DS3231 RTC module
-# - Performance optimizations for fast boot
-#
-# Run with: sudo ./setup_pi.sh
-# ============================================================================
-
 # === Configuration ===
 PROJECT_DIR_NAME="pysb-app"
-VENV_DIR_NAME="pysb_venv"
-SWAP_SIZE="2G"  # 2GB swap for matplotlib compilation
-PKG_MANAGER_TIMEOUT=180
+VENV_DIR_NAME="pysb_venv" # Changed to pysb_venv to match your Python script
+SWAP_SIZE="2G" # Increased to 2G, as 1G might still be tight for some compilations/matplotlib
+PKG_MANAGER_TIMEOUT=180 # Increased timeout slightly
 
 # === Script Variables ===
 ACTUAL_USER=""
@@ -176,173 +161,6 @@ configure_terminal() {
         sudo chown "$ACTUAL_USER:$ACTUAL_USER" "$rc"; info "Terminal history configured. Effective new shells."; fi
 }
 
-optimize_boot_performance() {
-    info "======================================"; info "Optimizing Boot Performance"
-    info "Disabling slow cloud-init services (keeping WiFi config)..."
-
-    # Disable slow cloud-init services (keeps cloud-init.service and cloud-init-local.service for WiFi)
-    for svc in cloud-config.service cloud-final.service; do
-        if systemctl is-enabled "$svc" &>/dev/null 2>&1; then
-            sudo systemctl disable "$svc" 2>/dev/null || true
-            sudo systemctl mask "$svc" 2>/dev/null || true
-            info "  Disabled: $svc"
-        else
-            info "  Already disabled: $svc"
-        fi
-    done
-
-    # Disable snap services (not needed for spectrometer)
-    info "Disabling snap services..."
-    for svc in snapd.service snapd.socket snapd.seeded.service snap.lxd.activate.service; do
-        if systemctl list-unit-files | grep -q "^$svc"; then
-            sudo systemctl disable "$svc" 2>/dev/null || true
-            sudo systemctl mask "$svc" 2>/dev/null || true
-            info "  Disabled: $svc"
-        fi
-    done
-
-    # Disable NetworkManager-wait-online (WiFi still connects, just doesn't block boot)
-    info "Disabling network-wait service..."
-    if systemctl is-enabled NetworkManager-wait-online.service &>/dev/null 2>&1; then
-        sudo systemctl disable NetworkManager-wait-online.service 2>/dev/null || true
-        sudo systemctl mask NetworkManager-wait-online.service 2>/dev/null || true
-        info "  Disabled: NetworkManager-wait-online.service"
-    else
-        info "  Already disabled: NetworkManager-wait-online.service"
-    fi
-
-    info "Boot optimization complete. Expected boot time: ~20 seconds (down from 2+ minutes)"
-}
-
-install_local_libraries() {
-    info "======================================"; info "Installing Local Libraries from lib/ folder"
-    local script_src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local lib_src_dir="$script_src_dir/lib"
-    local venv_pip="$VENV_PATH/bin/pip"
-    local venv_python="$VENV_PATH/bin/python"
-
-    if [ ! -d "$lib_src_dir" ]; then
-        warning "lib/ directory not found in script source. Skipping local library installation."
-        return
-    fi
-
-    # Install smbus2 for I2C communication (MCP9808 temperature sensor)
-    info "Installing smbus2 for I2C temperature sensor..."
-    if ! sudo -u "$ACTUAL_USER" "$venv_pip" install --no-cache-dir smbus2; then
-        warning "Failed to install smbus2. Temperature sensor may not work."
-    else
-        info "smbus2 installed successfully."
-    fi
-
-    # Install pyseabreeze from local lib folder if it exists
-    local pyseabreeze_dir="$lib_src_dir/pyseabreeze"
-    if [ -d "$pyseabreeze_dir" ]; then
-        info "Installing pyseabreeze from local lib/pyseabreeze..."
-        if [ -f "$pyseabreeze_dir/setup.py" ] || [ -f "$pyseabreeze_dir/pyproject.toml" ]; then
-            # Install in development mode so it uses the local source
-            if ! sudo -u "$ACTUAL_USER" "$venv_pip" install --no-cache-dir -e "$pyseabreeze_dir"; then
-                warning "Failed to install local pyseabreeze. Falling back to pip install..."
-                sudo -u "$ACTUAL_USER" "$venv_pip" install --no-cache-dir "seabreeze[pyseabreeze]" || warning "pip install seabreeze also failed"
-            else
-                info "Local pyseabreeze installed successfully."
-            fi
-        else
-            # If no setup.py, just add to PYTHONPATH via .pth file
-            info "No setup.py found, adding pyseabreeze to Python path..."
-            local site_packages=$("$venv_python" -c "import site; print(site.getsitepackages()[0])")
-            echo "$pyseabreeze_dir/src" | sudo -u "$ACTUAL_USER" tee "$site_packages/local_pyseabreeze.pth" > /dev/null
-            info "Added pyseabreeze to Python path via .pth file"
-        fi
-    else
-        info "Local pyseabreeze not found, installing from pip..."
-        sudo -u "$ACTUAL_USER" "$venv_pip" install --no-cache-dir "seabreeze[pyseabreeze]" || warning "Failed to install seabreeze from pip"
-    fi
-
-    # Note: Adafruit_Python_MCP9808 is not needed as we use smbus2 directly
-    # The temp_sensor.py module handles I2C communication without external Adafruit libraries
-    info "Local library installation complete."
-}
-
-verify_i2c_setup() {
-    info "======================================"; info "Verifying I2C Setup"
-
-    # Check if I2C device nodes exist
-    if ls /dev/i2c-* &>/dev/null 2>&1; then
-        info "I2C device nodes found:"
-        ls -la /dev/i2c-* 2>/dev/null | while read line; do info "  $line"; done
-    else
-        warning "I2C device nodes not found. They will appear after reboot."
-    fi
-
-    # Check if i2c-tools are installed and scan for devices
-    if command -v i2cdetect &>/dev/null; then
-        info "Scanning I2C bus 1 for devices..."
-        local scan_result=$(sudo i2cdetect -y 1 2>/dev/null || echo "scan_failed")
-        if [ "$scan_result" != "scan_failed" ]; then
-            echo "$scan_result" | while read line; do info "  $line"; done
-            # Check for known devices
-            if echo "$scan_result" | grep -q "18"; then
-                info "  [OK] MCP9808 temperature sensor detected at 0x18"
-            fi
-            if echo "$scan_result" | grep -q "68"; then
-                info "  [OK] DS3231 RTC detected at 0x68"
-            fi
-        else
-            info "I2C scan not available yet. Run 'sudo i2cdetect -y 1' after reboot."
-        fi
-    else
-        info "i2cdetect not available. Install with: sudo apt install i2c-tools"
-    fi
-
-    # Check user is in i2c group
-    if groups "$ACTUAL_USER" | grep -q -w "i2c"; then
-        info "User '$ACTUAL_USER' is in 'i2c' group."
-    else
-        warning "User '$ACTUAL_USER' is NOT in 'i2c' group. Adding..."
-        sudo usermod -aG i2c "$ACTUAL_USER" || warning "Failed to add user to i2c group"
-    fi
-}
-
-create_systemd_service() {
-    info "======================================"; info "Creating Systemd Service for Auto-Start (Optional)"
-
-    local service_file="/etc/systemd/system/pysb-app.service"
-
-    if [ -f "$service_file" ]; then
-        info "Systemd service already exists. Skipping."
-        return
-    fi
-
-    read -p "Create systemd service for auto-start on boot? (y/N): " create_service
-    if [[ "$create_service" != "y" && "$create_service" != "Y" ]]; then
-        info "Skipping systemd service creation."
-        return
-    fi
-
-    info "Creating systemd service file..."
-    cat << EOF | sudo tee "$service_file" > /dev/null
-[Unit]
-Description=PySB-App Spectrometer Application
-After=multi-user.target
-
-[Service]
-Type=simple
-User=$ACTUAL_USER
-WorkingDirectory=$PROJECT_DIR_PATH
-Environment="PATH=$VENV_PATH/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=$VENV_PATH/bin/python main.py
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    sudo systemctl daemon-reload
-    info "Systemd service created. Enable with: sudo systemctl enable pysb-app.service"
-    info "Start manually with: sudo systemctl start pysb-app.service"
-}
-
 setup_adafruit_pitft() { # New function for Adafruit PiTFT
     info "======================================"; info "Setting up Adafruit PiTFT 2.8c"
     local script_src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" # Directory where this setup_pi.sh is
@@ -442,239 +260,68 @@ setup_seabreeze_udev() { # Using your original function
     else info "Seabreeze udev rules installed. Reloading..."; sudo udevadm control --reload-rules && sudo udevadm trigger; info "udev reloaded."; fi
 }
 
-copy_project_files_custom() {
-    info "======================================"; info "Copying Project Files to $PROJECT_DIR_PATH"
+copy_project_files_custom() { # New function to copy main.py and assets
+    info "======================================"; info "Copying Project Files (main.py, assets) to $PROJECT_DIR_PATH"
     local script_src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-    # Create necessary directories
-    sudo -u "$ACTUAL_USER" mkdir -p "$PROJECT_DIR_PATH/hardware"
-    sudo -u "$ACTUAL_USER" mkdir -p "$PROJECT_DIR_PATH/ui"
-    sudo -u "$ACTUAL_USER" mkdir -p "$PROJECT_DIR_PATH/data"
-
-    # Copy main application files
-    for file in main.py config.py; do
-        if [ -f "$script_src_dir/$file" ]; then
-            info "Copying $file..."
-            sudo -u "$ACTUAL_USER" cp "$script_src_dir/$file" "$PROJECT_DIR_PATH/"
-        else
-            warning "$file not found in script source dir."
-        fi
-    done
-
-    # Copy test scripts
-    if [ -f "$script_src_dir/test_temp_sensor.py" ]; then
-        info "Copying test_temp_sensor.py..."
-        sudo -u "$ACTUAL_USER" cp "$script_src_dir/test_temp_sensor.py" "$PROJECT_DIR_PATH/"
-    fi
-
-    # Copy hardware module
-    if [ -d "$script_src_dir/hardware" ]; then
-        info "Copying hardware/ directory..."
-        sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/hardware" "$PROJECT_DIR_PATH/"
-    else
-        warning "hardware/ directory not found."
-    fi
-
-    # Copy UI module
-    if [ -d "$script_src_dir/ui" ]; then
-        info "Copying ui/ directory..."
-        sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/ui" "$PROJECT_DIR_PATH/"
-    else
-        warning "ui/ directory not found."
-    fi
-
-    # Copy data module
-    if [ -d "$script_src_dir/data" ]; then
-        info "Copying data/ directory..."
-        sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/data" "$PROJECT_DIR_PATH/"
-    else
-        warning "data/ directory not found."
-    fi
-
+    # Copy main.py
+    if [ -f "$script_src_dir/main.py" ]; then info "Copying main.py..."; sudo -u "$ACTUAL_USER" cp "$script_src_dir/main.py" "$PROJECT_DIR_PATH/"; else warning "main.py not found in script source dir."; fi
     # Copy assets directory
-    if [ -d "$script_src_dir/assets" ]; then
-        info "Copying assets/ directory..."
-        sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/assets" "$PROJECT_DIR_PATH/"
-    else
-        warning "assets/ directory not found."
-    fi
-
-    # Copy lib directory (for local pyseabreeze and other vendored libraries)
-    if [ -d "$script_src_dir/lib" ]; then
-        info "Copying lib/ directory..."
-        sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/lib" "$PROJECT_DIR_PATH/"
-    fi
-
-    # Copy requirements.txt if exists
-    if [ -f "$script_src_dir/requirements.txt" ]; then
-        info "Copying requirements.txt..."
-        sudo -u "$ACTUAL_USER" cp "$script_src_dir/requirements.txt" "$PROJECT_DIR_PATH/"
-    fi
+    if [ -d "$script_src_dir/assets" ]; then info "Copying assets/ directory..."; sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/assets" "$PROJECT_DIR_PATH/"; else warning "assets/ directory not found."; fi
+    # Copy lib directory (if it exists, e.g., for local pyseabreeze if you used that approach)
+    if [ -d "$script_src_dir/lib" ]; then info "Copying lib/ directory..."; sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/lib" "$PROJECT_DIR_PATH/"; fi
 
     sudo chown -R "$ACTUAL_USER:$ACTUAL_USER" "$PROJECT_DIR_PATH"
-    info "Project files copied successfully."
 }
 
-verify_setup() {
-    info "======================================"; info "Verifying Setup (Comprehensive Checks)"
-
-    local venv_py="$VENV_PATH/bin/python"
-    if [ ! -x "$venv_py" ]; then
-        warning "Venv Python not found. Skipping package check."
-        return
-    fi
-
-    # Check SPI device nodes
-    info "Checking for SPI device nodes..."
-    if ls /dev/spidev* >/dev/null 2>&1; then
-        info "  SPI devices found:"
-        ls -l /dev/spidev* 2>/dev/null | while read line; do info "    $line"; done
-    else
-        info "  SPI device nodes not found (expected until reboot)."
-    fi
-
-    # Check I2C device nodes
-    info "Checking for I2C device nodes..."
-    if ls /dev/i2c-* >/dev/null 2>&1; then
-        info "  I2C devices found:"
-        ls -l /dev/i2c-* 2>/dev/null | while read line; do info "    $line"; done
-    else
-        info "  I2C device nodes not found (expected until reboot)."
-    fi
-
-    # Check Python packages
-    info "Checking Python packages in venv..."
-    local pkgs_check=("matplotlib" "pygame" "pygame_menu" "spidev" "RPi.GPIO" "numpy" "pyusb" "smbus2")
-    local failed=()
-
-    for pkg in "${pkgs_check[@]}"; do
-        if sudo -u "$ACTUAL_USER" "$venv_py" -c "import $pkg" >/dev/null 2>&1; then
-            echo "    [OK] $pkg"
-        else
-            echo "    [FAILED] $pkg"
-            failed+=("$pkg")
-        fi
-    done
-
-    # Check seabreeze specifically
-    info "Checking seabreeze:"
-    if sudo -u "$ACTUAL_USER" "$venv_py" -c "import seabreeze" >/dev/null 2>&1; then
-        echo "    [OK] seabreeze"
-    else
-        echo "    [FAILED] seabreeze (check install)"
-    fi
-
-    # Summary
-    if [ ${#failed[@]} -gt 0 ]; then
-        warning "Python packages failed import: ${failed[*]}"
-        info "You can install missing packages with:"
-        info "  cd $PROJECT_DIR_PATH && source $VENV_DIR_NAME/bin/activate"
-        for pkg in "${failed[@]}"; do
-            info "  pip install $pkg"
-        done
-    else
-        info "All checked Python packages imported successfully."
-    fi
-
-    # Check project files
-    info "Checking project files..."
-    local required_files=("main.py" "config.py" "hardware/temp_sensor.py" "ui/menu_system.py")
-    for file in "${required_files[@]}"; do
-        if [ -f "$PROJECT_DIR_PATH/$file" ]; then
-            echo "    [OK] $file"
-        else
-            echo "    [MISSING] $file"
-        fi
-    done
+verify_setup() { # Modified to reflect potential changes
+    info "======================================"; info "Verifying Setup (Basic Checks)"
+    info "Checking for SPI device nodes (post-reboot)..."; if ls /dev/spidev* >/dev/null 2>&1; then info "SPI devices:"; ls -l /dev/spidev*; else info "SPI device nodes not found (expected until reboot)."; fi
+    info "Checking Python pkgs in venv ($VENV_PATH)..."; local pkgs_check=("matplotlib" "pygame" "pygame_menu" "spidev" "RPi.GPIO" "numpy" "pyusb") # Removed displayhatmini, added numpy, pyusb
+    local failed=(); local venv_py="$VENV_PATH/bin/python"
+    if [ ! -x "$venv_py" ]; then warning "Venv Python not found. Skipping package check."; return; fi
+    for pkg in "${pkgs_check[@]}"; do if sudo -u "$ACTUAL_USER" "$venv_py" -c "import $pkg" >/dev/null 2>&1; then echo "  - $pkg: OK"; else echo "  - $pkg: FAILED"; failed+=("$pkg"); fi; done
+    info "Checking seabreeze:"; if sudo -u "$ACTUAL_USER" "$venv_py" -c "import seabreeze" >/dev/null 2>&1; then echo "  - seabreeze: OK"; else echo "  - seabreeze: NOT IMPORTED (check install)"; fi
+    if [ ${#failed[@]} -gt 0 ]; then warning "Python pkgs failed import: ${failed[*]}"; else info "Checked Python pkgs imported OK."; fi
 }
 
 # === Main Script Logic ===
 main() {
-    info "====================================="
-    info "PySB-App Setup Script for Raspberry Pi Zero 2W"
-    info "====================================="
-    info "Target OS: Ubuntu 22.04 LTS Server"
-    info "Project: ~/$PROJECT_DIR_NAME"
-    info "Venv: $VENV_DIR_NAME"
+    info "====================================="; info "Starting Raspberry Pi Setup Script (Adafruit PiTFT Focus)"
+    info "Target OS: Ubuntu 22.04 LTS Server"; info "Project: ~/$PROJECT_DIR_NAME, Venv: $VENV_DIR_NAME"
     echo "====================================="
+    check_root; get_actual_user
+    check_date_time; check_internet
+    
+    configure_swap # Uses SWAP_SIZE from top
+    configure_needrestart
+    update_system
+    install_system_packages
+    
+    enable_spi_i2c # Combined function
+    setup_rtc
+    setup_adafruit_pitft # New: Sets up Adafruit display driver
+    setup_user_permissions
+    configure_terminal
+    
+    setup_python_venv # Creates project dir, venv, installs from requirements.txt (if present)
+    copy_project_files_custom # Copies main.py, assets, etc.
+    install_seabreeze # Installs seabreeze into the venv
+    setup_seabreeze_udev # Sets udev rules for seabreeze
 
-    # Initial checks
-    check_root
-    get_actual_user
-    check_date_time
-    check_internet
+    verify_setup
+    
+    info "Attempting to set hardware RTC from system time (if system time is correct)..."
+    if sudo hwclock -w; then info "Hardware RTC set to: $(sudo hwclock -r)"; else warning "Failed to write to hardware clock. Ensure time is correct and RTC is working."; fi
 
-    # System configuration
-    configure_swap              # 2GB swap for matplotlib compilation
-    configure_needrestart       # Auto-restart services during updates
-    update_system               # apt update && upgrade
-    install_system_packages     # Build tools, I2C tools, pygame dependencies
-
-    # Hardware interfaces
-    enable_spi_i2c              # Enable SPI and I2C in boot config
-    setup_rtc                   # DS3231 RTC module setup
-    setup_adafruit_pitft        # PiTFT 2.8" display driver
-    setup_user_permissions      # Add user to hardware groups (i2c, gpio, spi, etc.)
-    configure_terminal          # Bash history search
-
-    # Performance optimization (faster boot)
-    optimize_boot_performance   # Disable slow cloud-init, snap, network-wait services
-
-    # Python environment and application
-    setup_python_venv           # Create venv, install from requirements.txt
-    copy_project_files_custom   # Copy main.py, config.py, hardware/, ui/, data/, assets/, lib/
-    install_local_libraries     # Install smbus2, pyseabreeze from lib/
-    install_seabreeze           # Fallback: install seabreeze from pip if local install failed
-    setup_seabreeze_udev        # udev rules for spectrometer USB access
-
-    # Verification
-    verify_i2c_setup            # Check I2C bus and devices
-    verify_setup                # Check all packages and files
-
-    # Optional: Create systemd service for auto-start
-    create_systemd_service
-
-    # Set RTC from system time
-    info "Attempting to set hardware RTC from system time..."
-    if sudo hwclock -w 2>/dev/null; then
-        info "Hardware RTC set to: $(sudo hwclock -r 2>/dev/null || echo 'unknown')"
-    else
-        warning "Failed to write to hardware clock. Ensure RTC is connected and time is correct."
-    fi
-
-    # Final summary
-    echo ""
-    info "====================================="
-    info "Setup Complete!"
-    info "====================================="
-    echo ""
-    info "IMPORTANT: A REBOOT is REQUIRED for:"
-    info "  - Display drivers to take effect"
-    info "  - I2C/SPI interfaces to be available"
-    info "  - User group permissions to be active"
-    info "  - Boot optimizations to be applied"
-    echo ""
-    info "Run: sudo reboot"
-    echo ""
-    info "After reboot, SSH back in and run:"
+    echo ""; info "====================================="; info "Setup script finished!"
+    info "IMPORTANT: A REBOOT is REQUIRED for display drivers and some permissions to take full effect: sudo reboot"
+    info "After reboot, SSH back in, then:"
     info "  cd $PROJECT_DIR_PATH"
     info "  source $VENV_DIR_NAME/bin/activate"
     info "  python3 main.py"
-    echo ""
-    info "Useful test commands:"
-    info "  # Test temperature sensor"
-    info "  python3 test_temp_sensor.py"
-    echo ""
-    info "  # Test I2C devices"
-    info "  sudo i2cdetect -y 1"
-    echo ""
-    info "  # Test spectrometer"
-    info "  python -m seabreeze.cseabreeze_backend ListDevices"
-    echo ""
-    info "  # Test RTC"
-    info "  sudo hwclock -r"
-    echo ""
-    info "====================================="
+    info "Test seabreeze: python -m seabreeze.cseabreeze_backend ListDevices"
+    info "Test RTC: sudo hwclock -r"
+    echo "====================================="
 }
-
 main # Execute

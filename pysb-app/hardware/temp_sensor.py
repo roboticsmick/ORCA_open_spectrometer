@@ -75,8 +75,20 @@ class TempSensorInfo:
         self._update_thread = None
 
         ## @var _sensor
-        # @brief MCP9808 sensor instance (None if unavailable).
+        # @brief Flag indicating if sensor is available (True/None).
         self._sensor = None
+
+        ## @var _i2c_bus
+        # @brief SMBus instance for I2C communication (None if unavailable).
+        self._i2c_bus = None
+
+        ## @var _i2c_address
+        # @brief I2C address of the MCP9808 sensor.
+        self._i2c_address = 0x18
+
+        ## @var _i2c_bus_num
+        # @brief I2C bus number (typically 1 on Raspberry Pi).
+        self._i2c_bus_num = 1
 
         ## @var _gpio_available
         # @brief Boolean indicating if GPIO is available for fan control.
@@ -94,48 +106,71 @@ class TempSensorInfo:
 
     ##
     # @brief Initializes the MCP9808 temperature sensor.
-    # @details Attempts to import and initialize the Adafruit MCP9808 library.
-    #          The library is expected at: lib/Adafruit_Python_MCP9808/Adafruit_MCP9808/
+    # @details Uses smbus2 directly to communicate with the MCP9808 sensor via I2C.
+    #          No external Adafruit libraries required - just python3-smbus or smbus2.
     #          If initialization fails, sensor remains None and temperature reports "N/A".
     def _init_sensor(self):
-        """Initializes the MCP9808 temperature sensor."""
+        """Initializes the MCP9808 temperature sensor using smbus2."""
         if not config.HARDWARE.get("USE_TEMP_SENSOR_IF_AVAILABLE", False):
             logger.info("Temperature sensor disabled in config.")
             return
 
         try:
-            # Add library path for Adafruit MCP9808
-            lib_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                "lib",
-                "Adafruit_Python_MCP9808",
-            )
-            if lib_path not in sys.path:
-                sys.path.insert(0, lib_path)
-                logger.debug(f"Added library path: {lib_path}")
+            import smbus2
 
-            # Import and initialize sensor
-            from Adafruit_MCP9808 import MCP9808
+            # MCP9808 I2C address (default 0x18, configurable via A0/A1/A2 pins)
+            self._i2c_address = getattr(config, "MCP9808_I2C_ADDRESS", 0x18)
+            self._i2c_bus_num = getattr(config, "I2C_BUS_NUMBER", 1)
 
-            self._sensor = MCP9808.MCP9808()
+            # Open I2C bus
+            self._i2c_bus = smbus2.SMBus(self._i2c_bus_num)
 
-            # Verify sensor is responding
-            if self._sensor.begin():
-                # Do an initial read to confirm sensor is working
-                initial_temp = self._sensor.readTempC()
+            # Verify sensor by reading manufacturer and device IDs
+            # MCP9808 registers
+            REG_MANUF_ID = 0x06
+            REG_DEVICE_ID = 0x07
+
+            # Read manufacturer ID (should be 0x0054 for Microchip)
+            data = self._i2c_bus.read_i2c_block_data(self._i2c_address, REG_MANUF_ID, 2)
+            manuf_id = (data[0] << 8) | data[1]
+
+            # Read device ID (should be 0x0400 for MCP9808)
+            data = self._i2c_bus.read_i2c_block_data(self._i2c_address, REG_DEVICE_ID, 2)
+            device_id = (data[0] << 8) | data[1]
+
+            if manuf_id == 0x0054 and device_id == 0x0400:
+                # Sensor verified - do initial temperature read
+                initial_temp = self._read_temperature_raw()
                 if isinstance(initial_temp, (float, int)):
                     with self._lock:
                         self._temperature_c = float(initial_temp)
-                    logger.info(f"MCP9808 sensor initialized. Initial temp: {initial_temp:.1f}C")
+                    self._sensor = True  # Flag indicating sensor is available
+                    logger.info(f"MCP9808 sensor initialized on bus {self._i2c_bus_num}, "
+                               f"address 0x{self._i2c_address:02X}. Initial temp: {initial_temp:.1f}C")
                 else:
-                    logger.warning(f"MCP9808 returned invalid data type: {type(initial_temp)}")
-                    self._sensor = None
+                    logger.warning(f"MCP9808 initial read failed: {initial_temp}")
+                    self._i2c_bus.close()
+                    self._i2c_bus = None
             else:
-                logger.warning("MCP9808 sensor not detected (begin() returned False).")
-                self._sensor = None
+                logger.warning(f"MCP9808 not detected. Manuf ID: 0x{manuf_id:04X} "
+                              f"(expected 0x0054), Device ID: 0x{device_id:04X} (expected 0x0400)")
+                self._i2c_bus.close()
+                self._i2c_bus = None
 
-        except ImportError as e:
-            logger.warning(f"MCP9808 library not available: {e}")
+        except ImportError:
+            logger.warning("smbus2 not available. Install with: pip install smbus2")
+            self._sensor = None
+        except FileNotFoundError:
+            logger.warning(f"I2C bus {self._i2c_bus_num} not found. Is I2C enabled?")
+            self._sensor = None
+        except PermissionError:
+            logger.warning(f"Permission denied for I2C bus. Add user to 'i2c' group.")
+            self._sensor = None
+        except OSError as e:
+            if e.errno == 121:  # Remote I/O error - device not responding
+                logger.warning(f"MCP9808 not responding at address 0x{getattr(self, '_i2c_address', 0x18):02X}")
+            else:
+                logger.error(f"I2C error initializing MCP9808: {e}")
             self._sensor = None
         except Exception as e:
             logger.error(f"Failed to initialize MCP9808 sensor: {e}")
@@ -182,7 +217,7 @@ class TempSensorInfo:
 
     ##
     # @brief Stops the background update thread and cleans up resources.
-    # @details Waits for the thread to terminate and cleans up GPIO.
+    # @details Waits for the thread to terminate and cleans up GPIO and I2C.
     #          Fan is turned OFF during cleanup.
     def stop(self):
         """Stops the background update thread and cleans up."""
@@ -202,6 +237,15 @@ class TempSensorInfo:
                 logger.info("Fan GPIO cleaned up.")
             except Exception as e:
                 logger.error(f"Error cleaning up fan GPIO: {e}")
+
+        # Close I2C bus
+        if hasattr(self, "_i2c_bus") and self._i2c_bus is not None:
+            try:
+                self._i2c_bus.close()
+                logger.info("I2C bus closed.")
+            except Exception as e:
+                logger.error(f"Error closing I2C bus: {e}")
+            self._i2c_bus = None
 
         logger.info("Temperature sensor stopped.")
 
@@ -242,27 +286,50 @@ class TempSensorInfo:
         logger.info("Temperature update loop finished.")
 
     ##
+    # @brief Reads temperature directly from MCP9808 via I2C.
+    # @return Temperature in Celsius (float) or error string if read fails.
+    # @details Reads the ambient temperature register and converts to Celsius.
+    def _read_temperature_raw(self):
+        """Reads temperature directly from MCP9808 via I2C."""
+        if self._i2c_bus is None:
+            return "No Bus"
+
+        try:
+            # MCP9808 ambient temperature register
+            REG_AMBIENT_TEMP = 0x05
+
+            # Read 2 bytes from temperature register
+            data = self._i2c_bus.read_i2c_block_data(self._i2c_address, REG_AMBIENT_TEMP, 2)
+            raw_temp = (data[0] << 8) | data[1]
+
+            # Convert to Celsius (MCP9808 format)
+            # Bits 0-11 contain the temperature in 1/16 degree increments
+            # Bit 12 is the sign bit
+            temp_c = (raw_temp & 0x0FFF) / 16.0
+            if raw_temp & 0x1000:
+                temp_c -= 256.0
+
+            return temp_c
+
+        except OSError as e:
+            if e.errno == 121:
+                logger.error("MCP9808 remote I/O error during read")
+            else:
+                logger.error(f"I2C error reading temperature: {e}")
+            return "I2C Error"
+        except Exception as e:
+            logger.error(f"Error reading temperature: {e}")
+            return "Read Error"
+
+    ##
     # @brief Reads temperature from the MCP9808 sensor.
     # @return Temperature in Celsius (float) or error string if read fails.
     def _read_temperature(self):
         """Reads temperature from the sensor."""
-        if self._sensor is None:
+        if self._sensor is None and self._i2c_bus is None:
             return "No Sensor"
 
-        try:
-            raw_temp = self._sensor.readTempC()
-            if isinstance(raw_temp, (float, int)):
-                return float(raw_temp)
-            else:
-                logger.error(f"Invalid temperature data type: {type(raw_temp)}")
-                return "Type Error"
-        except AttributeError:
-            logger.error("Sensor object missing or method not found.")
-            self._sensor = None
-            return "Sensor Error"
-        except Exception as e:
-            logger.error(f"Error reading temperature: {e}")
-            return "Read Error"
+        return self._read_temperature_raw()
 
     ##
     # @brief Sets the fan state (on or off).
