@@ -1,6 +1,6 @@
 # ORCA Open Spectrometer
 
-A portable spectrometer system using Ocean Optics ST-VIS spectrometers with a Raspberry Pi Zero 2W and LCD display. Designed for field work in a compact, low-power package.
+A portable spectrometer system using Ocean Optics ST-VIS spectrometers with a Raspberry Pi Zero 2W and Adafruit 2.8LCD display. Designed for field work in a compact, low-power package.
 
 **Version:** 1.0
 **Last Updated:** 2025-12-15
@@ -27,13 +27,16 @@ A portable spectrometer system using Ocean Optics ST-VIS spectrometers with a Ra
 
 ## 1. Hardware Requirements
 
-- **Raspberry Pi Zero 2W** (or Pi 4)
-- **Adafruit PiTFT 2.8" display** (320x240)
-- **Ocean Optics ST-VIS spectrometer** (USB)
-- **High-quality microSD card** (Samsung 128GB PRO Plus recommended)
-- **MCP9808 temperature sensor** (optional)
-- **5V cooling fan with MOSFET control** (optional)
-- **Leak sensor** (optional, for underwater housing)
+- **Raspberry Pi Zero 2W** 
+- **PiTFT Plus Assembled 320x240 2.8" TFT + Resistive Touchscreen** 
+- **Ocean Optics ST-VIS spectrometer**
+- **High-quality microSD card** (Samsung 128/256GB PRO Plus recommended)
+- **Adafruit MCP9808 High Accuracy I2C Temperature Sensor Breakout - STEMMA QT / Qwiic temperature sensor** 
+- **FEX Heat Sink with Fan FEX40-40-21/T710/M2**
+- **Blue Robotics leak sensor SOS Probes**
+- **ORCA Open Spectro Pi Hat**
+- **ORCA Magnetic Hal Effect Trigger Switches**
+- **ORCA USB-C magnetic charging penetrator**
 
 ---
 
@@ -78,7 +81,7 @@ sudo apt install rpi-imager
 
 ---
 
-## 3. Setting Up WiFi
+## 3. Setting Up WiFi (Using Ubuntu)
 
 ### 3.1 Initial WiFi (During Imaging)
 
@@ -95,8 +98,9 @@ Configure your primary WiFi during the imaging process (section 2.2). Use your m
 #### Method B: Edit via SSH (after boot)
 
 ```bash
+# See section 3.3 if you don't know how to find your Raspberry Pi IP_ADDRESS
 ssh pi@<IP_ADDRESS>
-sudo nano /etc/netplan/50-cloud-init.yaml
+sudo vim /etc/netplan/50-cloud-init.yaml
 ```
 
 **Example configuration:**
@@ -128,9 +132,74 @@ sudo netplan apply
 
 ### 3.3 Finding the Pi's IP Address
 
-- Check your router/hotspot connected devices list
-- Or from another computer: `ping rpi.local`
-- The IP is also displayed in the app menu under "IP"
+An **IP address** is a unique number assigned to each device on a network (like `192.168.1.105` or `10.154.83.52`). You need the Pi's IP address to connect to it remotely via SSH.
+
+**Ways to find the IP address:**
+
+- **From the app**: The IP is displayed in the spectrometer app menu under "IP"
+- **From your router**: Check the connected devices list in your router or hotspot settings
+- **Using ping**: From another computer on the same network, run `ping rpi.local`
+
+### 3.4 Finding the Pi's IP Address via Mobile Hotspot
+
+When connecting to your Pi through a mobile hotspot (useful for field work), you may need to find its IP address manually using `nmap` - a network scanning tool.
+
+#### Prerequisites
+
+1. Your mobile hotspot WiFi credentials are configured in the Pi's `/etc/netplan/50-cloud-init.yaml` file
+2. Your laptop is connected to the same mobile hotspot
+3. The Pi is powered on and connected (check your phone shows 2+ devices connected)
+
+#### Step 1: Install nmap (if not already installed)
+
+```bash
+sudo apt install nmap
+```
+
+#### Step 2: Find your laptop's IP address
+
+```bash
+ip addr show | grep "inet "
+```
+
+Look for the IP address on your wireless interface (usually `wlan0` or `wlp...`):
+
+```text
+inet 10.154.83.49/24 brd 10.154.83.255 scope global dynamic wlp3s0
+```
+
+In this example, your laptop's IP is `10.154.83.49`.
+
+#### Step 3: Scan the network for other devices
+
+Use nmap to scan all devices on the same subnet. Replace the IP with yours, keeping `.0/24` at the end:
+
+```bash
+nmap -sn 10.154.83.0/24
+```
+
+This scans all addresses from `10.154.83.1` to `10.154.83.254`. Example output:
+
+```text
+Nmap scan report for 10.154.83.1
+Host is up (0.0050s latency).
+
+Nmap scan report for 10.154.83.49
+Host is up (0.00010s latency).
+
+Nmap scan report for 10.154.83.52
+Host is up (0.045s latency).
+```
+
+#### Step 4: Identify and connect to the Pi
+
+One of the IP addresses (not your laptop's, not `.1` which is usually the hotspot) will be the Pi. Try connecting:
+
+```bash
+ssh pi@10.154.83.52
+```
+
+**Tip:** If you have multiple unknown devices, try each one until you find the Pi. The Pi will respond with a password prompt for user `pi`.
 
 ---
 
@@ -147,8 +216,8 @@ ssh pi@<IP_ADDRESS>
 
 ```bash
 cd ~
-git clone https://github.com/YOUR_REPO/ORCA_open_spectrometer.git
-cd ORCA_open_spectrometer/pysb-app
+git clone https://github.com/roboticsmick/ORCA_open_spectrometer.git
+cd ORCA_open_spectrometer
 chmod +x setup_pi.sh
 sudo ./setup_pi.sh
 ```
@@ -180,6 +249,9 @@ The app runs automatically as a systemd service when the Pi boots. No action req
 ### 5.2 Service Commands
 
 ```bash
+ssh pi@<IP_ADDRESS>
+# Password: spectro (or your password)
+
 # Check if the app is running
 sudo systemctl status pysb-app.service
 
@@ -203,12 +275,10 @@ journalctl -u pysb-app.service -f
 sudo systemctl stop pysb-app.service
 
 # Activate virtual environment and run
-cd ~/pysb-app
+cd ~/ORCA_open_spectrometer/pysb-app
 source pysb_venv/bin/activate
 python3 main.py
 ```
-
-> **Note:** The service configuration may need to be set up if not included in setup_pi.sh. See Section 10 for details.
 
 ---
 
@@ -236,7 +306,7 @@ Controls how long the sensor collects light per measurement.
 | Maximum | 6000 ms |
 | Step | 50 ms |
 
-**Tips:**
+**General guidelines:**
 
 - **Low light conditions**: Increase integration time
 - **Bright light / saturation**: Decrease integration time
@@ -270,7 +340,7 @@ Where:
 
 - **Target** = Raw spectrum of your sample
 - **Dark** = Raw spectrum with sensor covered (no light)
-- **White** = Raw spectrum of a white reference standard (e.g., Spectralon)
+- **White** = Raw spectrum of a white reference standard (e.g., Spectralon or white PTFE panel)
 
 **Interpreting Values:**
 
@@ -278,9 +348,6 @@ Where:
 |-------|---------|
 | 0.0 | No reflectance (absorbs all light) |
 | 1.0 | Same reflectance as white reference (100%) |
-| > 1.0 | Brighter than reference (fluorescence, specular reflection) |
-
-> **Note:** Values > 1.0 are valid and are not clipped.
 
 ### 6.4 Scans to Average
 
@@ -293,7 +360,7 @@ Averages multiple scans to reduce noise.
 | Maximum | 50 |
 | Step | 1 |
 
-> **Trade-off:** Higher values = smoother data, but slower updates.
+> **Trade-off:** Higher values = smoother data, but slower live updates.
 
 ### 6.5 Display Wavelength Range
 
@@ -453,15 +520,14 @@ Press **Y** in live view to auto-scale the Y-axis based on current data.
 
 **Installing WSL on Windows:**
 
-```powershell
-# Run in PowerShell as Administrator
-wsl --install
-wsl --install -d Ubuntu
-```
+WSL lets you open a Linux terminal you can use in Windows. This allows you to use the Ubuntu linux commands on your Windows PC.
+
+Read the guidelines for installing WSL on windows here (How to install Linux on Windows with WSL
+)[https://learn.microsoft.com/en-us/windows/wsl/install].
 
 ### 9.2 Using rsync (Recommended)
 
-rsync is efficient for syncing folders and resuming interrupted transfers.
+rsync (remote sync) is a powerful command-line utility for efficiently transferring files and directories locally or over a network.
 
 **Download all data:**
 
@@ -470,19 +536,19 @@ rsync is efficient for syncing folders and resuming interrupted transfers.
 mkdir -p ~/spectra_data
 
 # Sync all data from Pi
-rsync -av --progress pi@192.168.1.105:~/pysb-app/spectra_data/ ~/spectra_data/
+rsync -av --progress pi@<IP_ADDRESS>:~/pysb-app/spectra_data/ ~/spectra_data/
 ```
 
 **Download specific date:**
 
 ```bash
-rsync -av --progress pi@192.168.1.105:~/pysb-app/spectra_data/2025-12-15/ ~/spectra_data/2025-12-15/
+rsync -av --progress pi@<IP_ADDRESS>:~/pysb-app/spectra_data/2025-12-15/ ~/spectra_data/2025-12-15/
 ```
 
 **Resume interrupted transfer:**
 
 ```bash
-rsync -av --progress --partial pi@192.168.1.105:~/pysb-app/spectra_data/ ~/spectra_data/
+rsync -av --progress --partial pi@<IP_ADDRESS>:~/pysb-app/spectra_data/ ~/spectra_data/
 ```
 
 ### 9.3 Using scp
@@ -492,13 +558,13 @@ scp is simpler for one-off file copies.
 **Download single file:**
 
 ```bash
-scp pi@192.168.1.105:~/pysb-app/spectra_data/2025-12-15/2025-12-15_spectra_log.csv ./
+scp pi@<IP_ADDRESS>:~/pysb-app/spectra_data/2025-12-15/2025-12-15_spectra_log.csv ./
 ```
 
 **Download entire folder:**
 
 ```bash
-scp -r pi@192.168.1.105:~/pysb-app/spectra_data/2025-12-15/ ./2025-12-15/
+scp -r pi@<IP_ADDRESS>:~/pysb-app/spectra_data/2025-12-15/ ./2025-12-15/
 ```
 
 ### 9.4 Windows: Accessing WSL Files
@@ -518,19 +584,7 @@ cp -r ~/spectra_data /mnt/c/Users/YourName/Desktop/
 ### 9.5 macOS: Using Finder
 
 ```text
-Go menu → Connect to Server → sftp://pi@192.168.1.105
-```
-
-### 9.6 SSH Key Setup (Optional)
-
-For passwordless access:
-
-```bash
-# Generate key (on your computer)
-ssh-keygen -t rsa -b 4096
-
-# Copy to Pi
-ssh-copy-id pi@192.168.1.105
+Go menu → Connect to Server → sftp://pi@<IP_ADDRESS>
 ```
 
 ---
@@ -549,7 +603,7 @@ sudo systemctl stop pysb-app.service
 ### 10.2 Edit config.py
 
 ```bash
-cd ~/pysb-app
+cd ~/ORCA_open_spectrometer/pysb-app
 source pysb_venv/bin/activate
 nano config.py  # or vim config.py
 ```
@@ -560,7 +614,7 @@ nano config.py  # or vim config.py
 
 ```python
 HARDWARE = {
-    "USE_DISPLAY_HAT": False,         # Pimoroni Display HAT
+    "USE_DISPLAY_HAT": False,         # Pimoroni Display HAT. No longer used.
     "USE_ADAFRUIT_PITFT": True,       # Adafruit PiTFT 2.8"
     "USE_GPIO_BUTTONS": False,        # On-board GPIO buttons
     "USE_HALL_EFFECT_BUTTONS": True,  # External Hall effect buttons
@@ -741,31 +795,18 @@ lsusb | grep -i ocean
 # Check cable connection
 ```
 
-### 13.3 Can't SSH to Pi
-
-```bash
-# Verify Pi is on network
-ping rpi.local
-
-# Find Pi on local network
-nmap -sn 192.168.1.0/24 | grep -B 2 "Raspberry"
-
-# Try hostname
-ssh pi@rpi.local
-```
-
-### 13.4 Display Not Working
+### 13.3 Display Not Working
 
 - Check display ribbon cable connection
 - Verify `USE_ADAFRUIT_PITFT: True` in config.py
 - Check framebuffer exists: `ls /dev/fb1`
 
-### 13.5 References Invalid Error
+### 13.4 References Invalid Error
 
 - Recapture dark and white references after changing integration time or averaging
 - Both references must use the same settings
 
-### 13.6 WiFi Not Connecting
+### 13.5 WiFi Not Connecting
 
 - Check `/etc/netplan/50-cloud-init.yaml` syntax
 - Verify SSID and password are correct
@@ -781,5 +822,4 @@ Special thanks to the [PySeabreeze](https://github.com/ap--/python-seabreeze) pr
 
 ## Support
 
-- Report issues: [GitHub Issues](https://github.com/YOUR_REPO/issues)
-- Technical documentation: See `pysb-app/app_guide.md`
+- Technical documentation: See [pysb-app/app_guide.md](pysb-app/app_guide.md)
