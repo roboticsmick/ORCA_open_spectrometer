@@ -299,24 +299,24 @@ class OptimizedPygamePlotter:
         self.num_y_ticks = max(0, num_y_ticks)
 
         ## @var y_tick_format_str
-        # @brief Format string for Y-axis tick labels.
-        self.y_tick_format_str = "{:.1f}"
+        # @brief Format string for Y-axis tick labels (integer for cleaner display).
+        self.y_tick_format_str = "{:.0f}"
 
         ## @var padding_left
-        # @brief Left padding for axes and labels.
-        self.padding_left = 60
+        # @brief Left padding for axes and labels (room for 5-digit Y values + label).
+        self.padding_left = 50
 
         ## @var padding_right
         # @brief Right padding.
-        self.padding_right = 20
+        self.padding_right = 10
 
         ## @var padding_top
-        # @brief Top padding.
-        self.padding_top = 20
+        # @brief Top padding (minimal for more plot height).
+        self.padding_top = 8
 
         ## @var padding_bottom
         # @brief Bottom padding for X-axis label.
-        self.padding_bottom = 50
+        self.padding_bottom = 38
 
         ## @var graph_area
         # @brief Rectangle defining the actual plotting area (inside padding).
@@ -658,20 +658,20 @@ class OptimizedPygamePlotter:
                 except (pygame.error, ValueError):
                     pass
 
-        # Draw X-axis label
+        # Draw X-axis label (positioned closer to axis to fit in reduced padding)
         if self.x_label_text:
             try:
                 x_label_surf = self.axis_label_font.render(
                     self.x_label_text, True, self.text_color
                 )
                 x_label_rect = x_label_surf.get_rect(
-                    centerx=(graph_left + graph_right) // 2, top=graph_bottom + 25
+                    centerx=(graph_left + graph_right) // 2, top=graph_bottom + 18
                 )
                 self.static_surface.blit(x_label_surf, x_label_rect)
             except pygame.error:
                 pass
 
-        # Draw Y-axis label (rotated)
+        # Draw Y-axis label (rotated) - positioned at left edge to avoid tick overlap
         if self.y_label_text:
             try:
                 y_label_surf = self.axis_label_font.render(
@@ -679,7 +679,7 @@ class OptimizedPygamePlotter:
                 )
                 y_label_rotated = pygame.transform.rotate(y_label_surf, 90)
                 y_label_rect = y_label_rotated.get_rect(
-                    centerx=15, centery=(graph_top + graph_bottom) // 2
+                    centerx=4, centery=(graph_top + graph_bottom) // 2
                 )
                 self.static_surface.blit(y_label_rotated, y_label_rect)
             except pygame.error:

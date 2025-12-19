@@ -1,9 +1,14 @@
 # ORCA Open Spectrometer
 
-A portable spectrometer system using Ocean Optics ST-VIS spectrometers with a Raspberry Pi Zero 2W and Adafruit 2.8LCD display. Designed for field work in a compact, low-power package.
+A one handed underwater spectrometer system using Ocean Optics ST-VIS spectrometers with a Raspberry Pi Zero 2W and Adafruit 2.8LCD display. Designed for field work in a compact, low-power package.
 
-**Version:** 1.0
-**Last Updated:** 2025-12-15
+![ORCA Open Spectrometer](pysb-app/assets/images/ORCA_open_spectro_testing.jpeg)
+
+## Changelog
+
+### 2025-DEC-18
+
+* Version 1.0 released
 
 ---
 
@@ -27,16 +32,16 @@ A portable spectrometer system using Ocean Optics ST-VIS spectrometers with a Ra
 
 ## 1. Hardware Requirements
 
-- **Raspberry Pi Zero 2W** 
-- **PiTFT Plus Assembled 320x240 2.8" TFT + Resistive Touchscreen** 
-- **Ocean Optics ST-VIS spectrometer**
-- **High-quality microSD card** (Samsung 128/256GB PRO Plus recommended)
-- **Adafruit MCP9808 High Accuracy I2C Temperature Sensor Breakout - STEMMA QT / Qwiic temperature sensor** 
-- **FEX Heat Sink with Fan FEX40-40-21/T710/M2**
-- **Blue Robotics leak sensor SOS Probes**
-- **ORCA Open Spectro Pi Hat**
-- **ORCA Magnetic Hal Effect Trigger Switches**
-- **ORCA USB-C magnetic charging penetrator**
+* **Raspberry Pi Zero 2W** 
+* **PiTFT Plus Assembled 320x240 2.8" TFT + Resistive Touchscreen** 
+* **Ocean Optics ST-VIS spectrometer**
+* **High-quality microSD card** (Samsung 128/256GB PRO Plus recommended)
+* **Adafruit MCP9808 High Accuracy I2C Temperature Sensor Breakout - STEMMA QT / Qwiic temperature sensor** 
+* **FEX Heat Sink with Fan FEX40-40-21/T710/M2**
+* **Blue Robotics leak sensor SOS Probes**
+* **ORCA Open Spectro Pi Hat**
+* **ORCA Magnetic Hal Effect Trigger Switches**
+* **ORCA USB-C magnetic charging penetrator**
 
 ---
 
@@ -64,7 +69,7 @@ sudo apt install rpi-imager
 | Hostname | `rpi` |
 | Username | `pi` |
 | Password | `spectro` (or your choice) |
-| Configure WiFi | Yes (see section 3) |
+| Configure WiFi | Yes (see section 3 for adding additional wifi networks) |
 | WiFi Country | Your country code (e.g., `AU`) |
 | Timezone | Your timezone (e.g., `Australia/Brisbane`) |
 | Enable SSH | Yes, with password authentication |
@@ -76,8 +81,8 @@ sudo apt install rpi-imager
 
 1. Insert the SD card into the Raspberry Pi
 2. Connect power
-3. Wait 2-3 minutes for first boot (the Pi expands the filesystem)
-4. The Pi will automatically connect to your configured WiFi
+3. Wait 3-5 minutes for first boot (the Pi expands the filesystem)
+4. The Pi should automatically connect to your configured WiFi
 
 ---
 
@@ -85,7 +90,7 @@ sudo apt install rpi-imager
 
 ### 3.1 Initial WiFi (During Imaging)
 
-Configure your primary WiFi during the imaging process (section 2.2). Use your mobile hotspot for easy field access.
+Configure your primary WiFi during the imaging process (section 2.2). You should also add your mobile hotspot for easy field access to the data of configuration settings, along with any other WiFi networks you plan on connecting to at this stage.
 
 ### 3.2 Adding Additional WiFi Networks
 
@@ -136,9 +141,9 @@ An **IP address** is a unique number assigned to each device on a network (like 
 
 **Ways to find the IP address:**
 
-- **From the app**: The IP is displayed in the spectrometer app menu under "IP"
-- **From your router**: Check the connected devices list in your router or hotspot settings
-- **Using ping**: From another computer on the same network, run `ping rpi.local`
+* **From the app**: The IP is displayed in the spectrometer app menu under "IP". This is only visible after the complete installation and setup of the Open Spectro app.
+* **From your router**: Check the connected devices list in your router or hotspot settings (see section 3.4 for details on how to do this).
+* **Using ping**: From another computer on the same network, run `ping rpi.local`. This is an easy way, but can sometimes be unreliable.
 
 ### 3.4 Finding the Pi's IP Address via Mobile Hotspot
 
@@ -224,11 +229,11 @@ sudo ./setup_pi.sh
 
 The setup script:
 
-- Installs all system dependencies
-- Creates a Python virtual environment
-- Installs Python packages (pygame, seabreeze, etc.)
-- Configures the display
-- Sets up the app to run as a systemd service on boot
+* Installs all system dependencies
+* Creates a Python virtual environment
+* Installs Python packages (pygame, seabreeze, etc.)
+* Configures the display
+* Sets up the app to run as a systemd service on boot
 
 ### 4.3 Reboot
 
@@ -308,9 +313,9 @@ Controls how long the sensor collects light per measurement.
 
 **General guidelines:**
 
-- **Low light conditions**: Increase integration time
-- **Bright light / saturation**: Decrease integration time
-- Use **Auto-Integration** (Section 7.4) to find the optimal value
+* **Low light conditions**: Increase integration time
+* **Bright light / saturation**: Decrease integration time
+* Use **Auto-Integration** (Section 7.4) to find the optimal value
 
 ### 6.3 Collection Mode
 
@@ -321,14 +326,14 @@ Controls how long the sensor collects light per measurement.
 
 #### RAW Mode
 
-- Shows direct sensor values
-- No calibration required
-- Best for: testing, alignment, troubleshooting
+* Shows direct sensor values
+* No calibration required
+* Best for: testing, alignment, troubleshooting
 
 #### Reflectance Mode
 
-- Calculates relative reflectance using dark and white references
-- **Requires calibration** before use (see Section 7)
+* Calculates relative reflectance using dark and white references
+* **Requires calibration** before use (see Section 7)
 
 **Reflectance Formula:**
 
@@ -338,9 +343,9 @@ Reflectance = (Target - Dark) / (White - Dark)
 
 Where:
 
-- **Target** = Raw spectrum of your sample
-- **Dark** = Raw spectrum with sensor covered (no light)
-- **White** = Raw spectrum of a white reference standard (e.g., Spectralon or white PTFE panel)
+* **Target** = Raw spectrum of your sample
+* **Dark** = Raw spectrum with sensor covered (no light)
+* **White** = Raw spectrum of a white reference standard (e.g., Spectralon or white PTFE panel)
 
 **Interpreting Values:**
 
@@ -410,8 +415,8 @@ Controls the cooling fan activation temperature.
 
 ### 6.8 Network Info (Read-Only)
 
-- **WiFi**: Current network name
-- **IP**: Current IP address (use this for SSH)
+* **WiFi**: Current network name
+* **IP**: Current IP address (use this for SSH)
 
 ---
 
@@ -471,8 +476,8 @@ Automatically finds the optimal integration time by targeting 80-95% sensor satu
 
 References are invalidated when you change:
 
-- **Integration time** → Both dark and white invalidated
-- **Scans to average** → Both dark and white invalidated
+* **Integration time** → Both dark and white invalidated
+* **Scans to average** → Both dark and white invalidated
 
 The app will display "CALIBRATE REQUIRED" if you try to use Reflectance mode with invalid references.
 
@@ -499,8 +504,8 @@ Files are saved to: `~/pysb-app/spectra_data/YYYY-MM-DD/`
 
 Each day creates a new folder with:
 
-- CSV file containing all spectra
-- PNG plot images for each capture
+* CSV file containing all spectra
+* PNG plot images for each capture
 
 ### 8.4 Rescale Y-Axis
 
@@ -723,9 +728,9 @@ Each row contains one spectrum:
 
 ### 11.4 PNG Plots
 
-- Generated automatically for RAW and REFLECTANCE captures
-- Calibration captures (DARK, WHITE) do not generate plots
-- High resolution suitable for publications
+* Generated automatically for RAW and REFLECTANCE captures
+* Calibration captures (DARK, WHITE) do not generate plots
+* High resolution suitable for publications
 
 ---
 
@@ -735,12 +740,12 @@ Each row contains one spectrum:
 
 The optional breakout PCB provides:
 
-- USB-C power input
-- Blue Robotics waterproof power switch
-- Real-time clock (DS3231) with battery backup
-- Leak sensor input (Blue Robotics SOS probes)
-- External button inputs
-- I2C and UART breakouts
+* USB-C power input
+* Blue Robotics waterproof power switch
+* Real-time clock (DS3231) with battery backup
+* Leak sensor input (Blue Robotics SOS probes)
+* External button inputs
+* I2C and UART breakouts
 
 See the `/PCB` folder for schematics and board files.
 
@@ -797,20 +802,154 @@ lsusb | grep -i ocean
 
 ### 13.3 Display Not Working
 
-- Check display ribbon cable connection
-- Verify `USE_ADAFRUIT_PITFT: True` in config.py
-- Check framebuffer exists: `ls /dev/fb1`
+* Check display ribbon cable connection
+* Verify `USE_ADAFRUIT_PITFT: True` in config.py
+* Check framebuffer exists: `ls /dev/fb1`
 
 ### 13.4 References Invalid Error
 
-- Recapture dark and white references after changing integration time or averaging
-- Both references must use the same settings
+* Recapture dark and white references after changing integration time or averaging
+* Both references must use the same settings
 
 ### 13.5 WiFi Not Connecting
 
-- Check `/etc/netplan/50-cloud-init.yaml` syntax
-- Verify SSID and password are correct
-- Check WiFi country code matches your location
+* Check `/etc/netplan/50-cloud-init.yaml` syntax
+* Verify SSID and password are correct
+* Check WiFi country code matches your location
+
+### 13.6 Debug printouts
+
+The app prints the status and processes out for easy debugging when connected via ssh. This should allow for easy detecting of errors.
+
+```sh
+# Stop the app service
+sudo systemctl stop pysb-app.service
+
+# Run manually to test
+cd ~/pysb-app
+python3 main.py
+
+# Remember to restart the service after debugging has been complete
+sudo systemctl start pysb-app.service
+```
+
+Example debug printouts:
+
+```sh
+(pysb_venv) pi@ada:~/pysb-app$ python3 main.py
+/home/pi/pysb-app/pysb_venv/lib/python3.10/site-packages/pygame/pkgdata.py:25: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import resource_stream, resource_exists
+pygame 2.6.1 (SDL 2.28.4, Python 3.10.12)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+Seabreeze libraries loaded successfully.
+DataManager: Matplotlib loaded successfully (Agg backend).
+Initializing standard Pygame display window...
+Standard Pygame window initialized (320x240)
+INFO: GPIO buttons initialized for pins: [20, 21, 19, 12]
+INFO: Leak sensor initialized on GPIO pin 26 (interrupt-based)
+Leak sensor thread started (waiting for interrupts).
+NetworkInfo thread started.
+SpectrometerController: Thread loop started
+SpectrometerController thread started
+DataManager: Thread loop started
+DataManager thread started
+Entering main application logic...
+Showing splash screen...
+DataManager: Data directory ready: /home/pi/pysb-app/spectra_data
+Splash screen done.
+Showing terms screen...
+DEBUG: Button 'enter' pressed (GPIO 19)
+Terms screen done.
+Entering main loop...
+Spectrometer initialized: ST
+  Serial: ST02348
+  Wavelength range: 348.3 - 809.2 nm
+  Pixels: 1516
+  Integration time limits: 3800 - 6000000 µs
+DEBUG: Button 'enter' pressed (GPIO 19)
+SpectrometerScreen: Entering live view
+SpectrometerScreen: Set Y-axis for RAW mode: 1000.0
+SpectrometerController: New session started (ID: 1)
+SpectrometerScreen: Setting wavelengths (length: 1516)
+DEBUG: Button 'up' pressed (GPIO 20)
+SpectrometerScreen: Entering calibration menu
+SpectrometerController: Session stopped (ID: 1)
+DEBUG: Button 'down' pressed (GPIO 21)
+SpectrometerScreen: Starting auto-integration setup
+SpectrometerScreen: Cancelling auto-integration
+SpectrometerScreen: Auto-integ initial test: 1000000 µs
+SpectrometerScreen: Target ADC range: 13106 - 15564
+DEBUG: Button 'enter' pressed (GPIO 19)
+SpectrometerScreen: Auto-integ capture requested at 1000000 µs
+SpectrometerController: New session started (ID: 2)
+SpectrometerScreen: Iter 1: Peak=1125 Next=6000.0ms
+SpectrometerScreen: Auto-integ capture requested at 6000000 µs
+SpectrometerController: New session started (ID: 3)
+SpectrometerScreen: Auto-integ complete: At max integration, still low. Proposed: 6000 ms
+SpectrometerController: Session stopped (ID: 3)
+DEBUG: Button 'enter' pressed (GPIO 19)
+SpectrometerScreen: Applying auto-integration result
+SpectrometerScreen: Sent CMD_UPDATE_SETTINGS with integration_time_ms=6000
+SpectrometerScreen: New integration time: 6000 ms
+SpectrometerScreen: Exiting calibration, returning to live view
+SpectrometerScreen: Restored collection mode to RAW
+SpectrometerController: Integration time updated to 6000 ms
+SpectrometerController: New session started (ID: 4)
+SpectrometerScreen: Setting wavelengths (length: 1516)
+SpectrometerScreen: Rescaling Y-axis...
+SpectrometerScreen: Y-axis rescaled to 9962.84
+SpectrometerScreen: Auto-rescaled Y-axis after auto-integration
+DEBUG: Button 'enter' pressed (GPIO 19)
+SpectrometerScreen: Data frozen for capture
+SpectrometerController: Session stopped (ID: 4)
+DEBUG: Button 'back' pressed (GPIO 12)
+SpectrometerScreen: Returning to live view
+SpectrometerController: New session started (ID: 5)
+DEBUG: Button 'enter' pressed (GPIO 19)
+SpectrometerScreen: Data frozen for capture
+DEBUG: Button 'enter' pressed (GPIO 19)
+SpectrometerScreen: Save request sent (RAW)
+DataManager: Processing save request (RAW)...
+  Timestamp: 2025-12-19 11:27:50.461775
+  Integration: 6000 ms
+  Scans averaged: 1
+  Session scan count: 1
+SpectrometerScreen: Returning to live view
+DataManager: Found 6 existing scans in today's log
+DataManager: Saved RAW to CSV successfully
+DataManager: Plot saved: /home/pi/pysb-app/spectra_data/2025-12-19/spectrum_RAW_FIBER_2025-12-19-112750.png
+SpectrometerController: Session stopped (ID: 5)
+SpectrometerController: New session started (ID: 6)
+DEBUG: Button 'enter' pressed (GPIO 19)
+SpectrometerScreen: Data frozen for capture
+SpectrometerController: Session stopped (ID: 6)
+DEBUG: Button 'enter' pressed (GPIO 19)
+SpectrometerScreen: Save request sent (RAW)
+DataManager: Processing save request (RAW)...
+  Timestamp: 2025-12-19 11:27:56.572918
+  Integration: 6000 ms
+  Scans averaged: 1
+  Session scan count: 2
+SpectrometerScreen: Returning to live view
+DataManager: Saved RAW to CSV successfully
+SpectrometerController: New session started (ID: 7)
+DataManager: Plot saved: /home/pi/pysb-app/spectra_data/2025-12-19/spectrum_RAW_FIBER_2025-12-19-112756.png
+DEBUG: Button 'enter' pressed (GPIO 19)
+SpectrometerScreen: Data frozen for capture
+DEBUG: Button 'enter' pressed (GPIO 19)
+SpectrometerScreen: Save request sent (RAW)
+DataManager: Processing save request (RAW)...
+  Timestamp: 2025-12-19 11:28:22.606372
+  Integration: 6000 ms
+  Scans averaged: 1
+  Session scan count: 3
+SpectrometerScreen: Returning to live view
+DataManager: Saved RAW to CSV successfully
+DataManager: Plot saved: /home/pi/pysb-app/spectra_data/2025-12-19/spectrum_RAW_FIBER_2025-12-19-112822.png
+SpectrometerController: Session stopped (ID: 7)
+SpectrometerController: New session started (ID: 8)
+
+```
 
 ---
 
@@ -822,4 +961,4 @@ Special thanks to the [PySeabreeze](https://github.com/ap--/python-seabreeze) pr
 
 ## Support
 
-- Technical documentation: See [pysb-app/app_guide.md](pysb-app/app_guide.md)
+* Technical documentation: See [pysb-app/app_guide.md](pysb-app/app_guide.md)

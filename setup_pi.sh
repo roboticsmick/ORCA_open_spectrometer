@@ -19,6 +19,7 @@ set -e
 
 # === Configuration ===
 PROJECT_DIR_NAME="pysb-app"
+APP_SRC_SUBDIR="pysb-app"  # Source files are in repo/pysb-app/
 VENV_DIR_NAME="pysb_venv"
 SWAP_SIZE="2G"  # 2GB swap for matplotlib compilation
 PKG_MANAGER_TIMEOUT=180
@@ -28,6 +29,7 @@ ACTUAL_USER=""
 ACTUAL_HOME=""
 PROJECT_DIR_PATH=""
 VENV_PATH=""
+APP_SRC_DIR=""  # Will be set to script_dir/pysb-app/
 
 # === Helper Functions ===
 critical_error() {
@@ -53,7 +55,11 @@ get_actual_user() {
     ACTUAL_HOME=$(getent passwd "$ACTUAL_USER" | cut -d: -f6)
     if [ -z "$ACTUAL_HOME" ] || [ ! -d "$ACTUAL_HOME" ]; then critical_error "No valid home dir for '$ACTUAL_USER'."; fi
     PROJECT_DIR_PATH="$ACTUAL_HOME/$PROJECT_DIR_NAME"; VENV_PATH="$PROJECT_DIR_PATH/$VENV_DIR_NAME"
+    # Set source directory (where app files are in the repo)
+    local script_src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    APP_SRC_DIR="$script_src_dir/$APP_SRC_SUBDIR"
     info "User: $ACTUAL_USER (home: $ACTUAL_HOME)"; info "Project dir: $PROJECT_DIR_PATH"; info "Venv: $VENV_PATH"
+    info "App source: $APP_SRC_DIR"
 }
 check_internet() {
     info "Checking internet..."; if ping -c 1 8.8.8.8 >/dev/null 2>&1; then info "Internet OK."; else warning "No internet."; fi
@@ -216,13 +222,13 @@ optimize_boot_performance() {
 
 install_local_libraries() {
     info "======================================"; info "Installing Local Libraries from lib/ folder"
-    local script_src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local lib_src_dir="$script_src_dir/lib"
+    # APP_SRC_DIR is set in get_actual_user() and points to repo/pysb-app/
+    local lib_src_dir="$APP_SRC_DIR/lib"
     local venv_pip="$VENV_PATH/bin/pip"
     local venv_python="$VENV_PATH/bin/python"
 
     if [ ! -d "$lib_src_dir" ]; then
-        warning "lib/ directory not found in script source. Skipping local library installation."
+        warning "lib/ directory not found in $APP_SRC_DIR. Skipping local library installation."
         return
     fi
 
@@ -389,8 +395,8 @@ setup_python_venv() {
     info "Upgrading pip, setuptools, wheel in venv..."
     sudo -u "$ACTUAL_USER" "$venv_python" -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
-    local script_src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local req_file="$script_src_dir/requirements.txt"
+    # APP_SRC_DIR is set in get_actual_user() and points to repo/pysb-app/
+    local req_file="$APP_SRC_DIR/requirements.txt"
 
     if [ -f "$req_file" ]; then
         info "Copying requirements.txt to project directory..."
@@ -444,7 +450,11 @@ setup_seabreeze_udev() { # Using your original function
 
 copy_project_files_custom() {
     info "======================================"; info "Copying Project Files to $PROJECT_DIR_PATH"
-    local script_src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # APP_SRC_DIR is set in get_actual_user() and points to repo/pysb-app/
+
+    if [ ! -d "$APP_SRC_DIR" ]; then
+        critical_error "App source directory not found: $APP_SRC_DIR"
+    fi
 
     # Create necessary directories
     sudo -u "$ACTUAL_USER" mkdir -p "$PROJECT_DIR_PATH/hardware"
@@ -453,62 +463,62 @@ copy_project_files_custom() {
 
     # Copy main application files
     for file in main.py config.py; do
-        if [ -f "$script_src_dir/$file" ]; then
+        if [ -f "$APP_SRC_DIR/$file" ]; then
             info "Copying $file..."
-            sudo -u "$ACTUAL_USER" cp "$script_src_dir/$file" "$PROJECT_DIR_PATH/"
+            sudo -u "$ACTUAL_USER" cp "$APP_SRC_DIR/$file" "$PROJECT_DIR_PATH/"
         else
-            warning "$file not found in script source dir."
+            warning "$file not found in $APP_SRC_DIR"
         fi
     done
 
     # Copy test scripts
-    if [ -f "$script_src_dir/test_temp_sensor.py" ]; then
+    if [ -f "$APP_SRC_DIR/test_temp_sensor.py" ]; then
         info "Copying test_temp_sensor.py..."
-        sudo -u "$ACTUAL_USER" cp "$script_src_dir/test_temp_sensor.py" "$PROJECT_DIR_PATH/"
+        sudo -u "$ACTUAL_USER" cp "$APP_SRC_DIR/test_temp_sensor.py" "$PROJECT_DIR_PATH/"
     fi
 
     # Copy hardware module
-    if [ -d "$script_src_dir/hardware" ]; then
+    if [ -d "$APP_SRC_DIR/hardware" ]; then
         info "Copying hardware/ directory..."
-        sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/hardware" "$PROJECT_DIR_PATH/"
+        sudo -u "$ACTUAL_USER" cp -r "$APP_SRC_DIR/hardware" "$PROJECT_DIR_PATH/"
     else
-        warning "hardware/ directory not found."
+        warning "hardware/ directory not found in $APP_SRC_DIR"
     fi
 
     # Copy UI module
-    if [ -d "$script_src_dir/ui" ]; then
+    if [ -d "$APP_SRC_DIR/ui" ]; then
         info "Copying ui/ directory..."
-        sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/ui" "$PROJECT_DIR_PATH/"
+        sudo -u "$ACTUAL_USER" cp -r "$APP_SRC_DIR/ui" "$PROJECT_DIR_PATH/"
     else
-        warning "ui/ directory not found."
+        warning "ui/ directory not found in $APP_SRC_DIR"
     fi
 
     # Copy data module
-    if [ -d "$script_src_dir/data" ]; then
+    if [ -d "$APP_SRC_DIR/data" ]; then
         info "Copying data/ directory..."
-        sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/data" "$PROJECT_DIR_PATH/"
+        sudo -u "$ACTUAL_USER" cp -r "$APP_SRC_DIR/data" "$PROJECT_DIR_PATH/"
     else
-        warning "data/ directory not found."
+        warning "data/ directory not found in $APP_SRC_DIR"
     fi
 
     # Copy assets directory
-    if [ -d "$script_src_dir/assets" ]; then
+    if [ -d "$APP_SRC_DIR/assets" ]; then
         info "Copying assets/ directory..."
-        sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/assets" "$PROJECT_DIR_PATH/"
+        sudo -u "$ACTUAL_USER" cp -r "$APP_SRC_DIR/assets" "$PROJECT_DIR_PATH/"
     else
-        warning "assets/ directory not found."
+        warning "assets/ directory not found in $APP_SRC_DIR"
     fi
 
     # Copy lib directory (for local pyseabreeze and other vendored libraries)
-    if [ -d "$script_src_dir/lib" ]; then
+    if [ -d "$APP_SRC_DIR/lib" ]; then
         info "Copying lib/ directory..."
-        sudo -u "$ACTUAL_USER" cp -r "$script_src_dir/lib" "$PROJECT_DIR_PATH/"
+        sudo -u "$ACTUAL_USER" cp -r "$APP_SRC_DIR/lib" "$PROJECT_DIR_PATH/"
     fi
 
     # Copy requirements.txt if exists
-    if [ -f "$script_src_dir/requirements.txt" ]; then
+    if [ -f "$APP_SRC_DIR/requirements.txt" ]; then
         info "Copying requirements.txt..."
-        sudo -u "$ACTUAL_USER" cp "$script_src_dir/requirements.txt" "$PROJECT_DIR_PATH/"
+        sudo -u "$ACTUAL_USER" cp "$APP_SRC_DIR/requirements.txt" "$PROJECT_DIR_PATH/"
     fi
 
     sudo chown -R "$ACTUAL_USER:$ACTUAL_USER" "$PROJECT_DIR_PATH"

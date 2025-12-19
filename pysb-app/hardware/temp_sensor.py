@@ -4,7 +4,7 @@
 # @file temp_sensor.py
 # @brief Temperature sensor monitoring and fan control module.
 # @details This module provides the TempSensorInfo class which manages:
-#          - MCP9808 temperature sensor readings via I2C
+#          - MCP9808 temperature sensor readings via I2C using smbus2
 #          - Automatic fan control based on temperature threshold
 #          - Thread-safe access to temperature and fan state
 #
@@ -12,7 +12,7 @@
 #          Fan turns ON when temperature >= threshold. Default threshold is 0C,
 #          meaning the fan runs continuously when the spectrometer starts.
 #
-#          Library path on Raspberry Pi: /home/pi/pysb-app/lib/Adafruit_Python_MCP9808/MCP9808.py
+#          Requires: smbus2 (pip install smbus2)
 
 import sys
 import os
