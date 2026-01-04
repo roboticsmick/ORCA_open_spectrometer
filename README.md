@@ -3,6 +3,7 @@
 A one handed underwater spectrometer system using Ocean Optics ST-VIS spectrometers with a Raspberry Pi Zero 2W and Adafruit 2.8LCD display. Designed for field work in a compact, low-power package.
 
 ![ORCA Open Spectrometer](pysb-app/assets/images/ORCA_open_spectro_testing.jpeg)
+![ORCA Open Spectrometer](pysb-app/assets/images/demo.png)
 
 ## Changelog
 
@@ -304,6 +305,8 @@ The app uses 4 buttons:
 
 Controls how long the sensor collects light per measurement.
 
+![ORCA Open Spectrometer](pysb-app/assets/images/menu.png)
+
 | Parameter | Value |
 |-----------|-------|
 | Default | 1000 ms |
@@ -357,6 +360,8 @@ Where:
 ### 6.4 Scans to Average
 
 Averages multiple scans to reduce noise.
+
+![ORCA Open Spectrometer](pysb-app/assets/images/scans_to_average.png)
 
 | Parameter | Value |
 |-----------|-------|
@@ -424,6 +429,8 @@ Controls the cooling fan activation temperature.
 
 Calibration is **required** for Reflectance mode. Both references must be captured at the **same integration time and averaging settings**.
 
+![ORCA Open Spectrometer](pysb-app/assets/images/calibrate.png)
+
 ### 7.1 Access Calibration Menu
 
 1. Enter live view (Menu → Start Capture)
@@ -463,6 +470,8 @@ The white reference captures maximum expected reflectance.
 
 Automatically finds the optimal integration time by targeting 80-95% sensor saturation.
 
+![ORCA Open Spectrometer](pysb-app/assets/images/auto_integration.png)
+
 1. Press **Y** to start auto-integration setup
 2. **Point at your brightest expected sample** (usually white reference)
 3. Press **A** to begin the algorithm
@@ -484,6 +493,8 @@ The app will display "CALIBRATE REQUIRED" if you try to use Reflectance mode wit
 ---
 
 ## 8. Capturing Spectra
+
+![ORCA Open Spectrometer](pysb-app/assets/images/capture.png)
 
 ### 8.1 Live View
 
