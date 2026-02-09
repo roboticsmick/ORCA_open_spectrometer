@@ -202,7 +202,7 @@ Host is up (0.045s latency).
 One of the IP addresses (not your laptop's, not `.1` which is usually the hotspot) will be the Pi. Try connecting:
 
 ```bash
-ssh pi@10.154.83.52
+ssh -Y pi@10.154.83.52
 ```
 
 **Tip:** If you have multiple unknown devices, try each one until you find the Pi. The Pi will respond with a password prompt for user `pi`.
@@ -869,7 +869,7 @@ Showing splash screen...
 DataManager: Data directory ready: /home/pi/pysb-app/spectra_data
 Splash screen done.
 Showing terms screen...
-DEBUG: Button 'enter' pressed (GPIO 19)
+DEBUG: Button 'enter' pressed (GPIO 5)
 Terms screen done.
 Entering main loop...
 Spectrometer initialized: ST
@@ -877,7 +877,7 @@ Spectrometer initialized: ST
   Wavelength range: 348.3 - 809.2 nm
   Pixels: 1516
   Integration time limits: 3800 - 6000000 µs
-DEBUG: Button 'enter' pressed (GPIO 19)
+DEBUG: Button 'enter' pressed (GPIO 5)
 SpectrometerScreen: Entering live view
 SpectrometerScreen: Set Y-axis for RAW mode: 1000.0
 SpectrometerController: New session started (ID: 1)
@@ -890,7 +890,7 @@ SpectrometerScreen: Starting auto-integration setup
 SpectrometerScreen: Cancelling auto-integration
 SpectrometerScreen: Auto-integ initial test: 1000000 µs
 SpectrometerScreen: Target ADC range: 13106 - 15564
-DEBUG: Button 'enter' pressed (GPIO 19)
+DEBUG: Button 'enter' pressed (GPIO 5)
 SpectrometerScreen: Auto-integ capture requested at 1000000 µs
 SpectrometerController: New session started (ID: 2)
 SpectrometerScreen: Iter 1: Peak=1125 Next=6000.0ms
@@ -898,7 +898,7 @@ SpectrometerScreen: Auto-integ capture requested at 6000000 µs
 SpectrometerController: New session started (ID: 3)
 SpectrometerScreen: Auto-integ complete: At max integration, still low. Proposed: 6000 ms
 SpectrometerController: Session stopped (ID: 3)
-DEBUG: Button 'enter' pressed (GPIO 19)
+DEBUG: Button 'enter' pressed (GPIO 5)
 SpectrometerScreen: Applying auto-integration result
 SpectrometerScreen: Sent CMD_UPDATE_SETTINGS with integration_time_ms=6000
 SpectrometerScreen: New integration time: 6000 ms
@@ -910,15 +910,15 @@ SpectrometerScreen: Setting wavelengths (length: 1516)
 SpectrometerScreen: Rescaling Y-axis...
 SpectrometerScreen: Y-axis rescaled to 9962.84
 SpectrometerScreen: Auto-rescaled Y-axis after auto-integration
-DEBUG: Button 'enter' pressed (GPIO 19)
+DEBUG: Button 'enter' pressed (GPIO 5)
 SpectrometerScreen: Data frozen for capture
 SpectrometerController: Session stopped (ID: 4)
 DEBUG: Button 'back' pressed (GPIO 12)
 SpectrometerScreen: Returning to live view
 SpectrometerController: New session started (ID: 5)
-DEBUG: Button 'enter' pressed (GPIO 19)
+DEBUG: Button 'enter' pressed (GPIO 5)
 SpectrometerScreen: Data frozen for capture
-DEBUG: Button 'enter' pressed (GPIO 19)
+DEBUG: Button 'enter' pressed (GPIO 5)
 SpectrometerScreen: Save request sent (RAW)
 DataManager: Processing save request (RAW)...
   Timestamp: 2025-12-19 11:27:50.461775
@@ -931,10 +931,10 @@ DataManager: Saved RAW to CSV successfully
 DataManager: Plot saved: /home/pi/pysb-app/spectra_data/2025-12-19/spectrum_RAW_FIBER_2025-12-19-112750.png
 SpectrometerController: Session stopped (ID: 5)
 SpectrometerController: New session started (ID: 6)
-DEBUG: Button 'enter' pressed (GPIO 19)
+DEBUG: Button 'enter' pressed (GPIO 5)
 SpectrometerScreen: Data frozen for capture
 SpectrometerController: Session stopped (ID: 6)
-DEBUG: Button 'enter' pressed (GPIO 19)
+DEBUG: Button 'enter' pressed (GPIO 5)
 SpectrometerScreen: Save request sent (RAW)
 DataManager: Processing save request (RAW)...
   Timestamp: 2025-12-19 11:27:56.572918
@@ -945,9 +945,9 @@ SpectrometerScreen: Returning to live view
 DataManager: Saved RAW to CSV successfully
 SpectrometerController: New session started (ID: 7)
 DataManager: Plot saved: /home/pi/pysb-app/spectra_data/2025-12-19/spectrum_RAW_FIBER_2025-12-19-112756.png
-DEBUG: Button 'enter' pressed (GPIO 19)
+DEBUG: Button 'enter' pressed (GPIO 5)
 SpectrometerScreen: Data frozen for capture
-DEBUG: Button 'enter' pressed (GPIO 19)
+DEBUG: Button 'enter' pressed (GPIO 5)
 SpectrometerScreen: Save request sent (RAW)
 DataManager: Processing save request (RAW)...
   Timestamp: 2025-12-19 11:28:22.606372

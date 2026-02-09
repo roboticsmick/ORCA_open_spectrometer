@@ -41,7 +41,7 @@ BUTTON_PINS = {"A": 5, "B": 6, "X": 16, "Y": 24}  # Default: Pimoroni Display HA
 if HARDWARE["USE_ADAFRUIT_PITFT"]:
     BUTTON_PINS = {"A": 27, "B": 23, "X": 22, "Y": 17}
 
-HALL_EFFECT_PINS = {"UP": 20, "DOWN": 21, "ENTER": 19, "BACK": 12}
+HALL_EFFECT_PINS = {"UP": 20, "DOWN": 21, "ENTER": 5, "BACK": 12}
 
 LEAK_SENSOR_PIN = 26
 LEAK_SENSOR_CHECK_S = 1.0  # How often to check the leak sensor (seconds)

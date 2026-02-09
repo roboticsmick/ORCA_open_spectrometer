@@ -412,6 +412,10 @@ class SpectrometerScreen:
             else:
                 self._refs_invalid_for_reflectance = False
                 self._refs_invalid_reason = ""
+        else:
+            # RAW mode never requires reference validation
+            self._refs_invalid_for_reflectance = False
+            self._refs_invalid_reason = ""
 
         # Start a new capture session with updated settings
         self.request_queue.put(SpectrometerCommand(CMD_START_SESSION))
@@ -847,6 +851,10 @@ class SpectrometerScreen:
                 self._refs_invalid_for_reflectance = False
                 self._refs_invalid_reason = ""
                 print("SpectrometerScreen: References valid, starting spectrometer")
+        else:
+            # RAW mode never requires reference validation
+            self._refs_invalid_for_reflectance = False
+            self._refs_invalid_reason = ""
 
         # Start new session for fresh data
         self.request_queue.put(SpectrometerCommand(CMD_START_SESSION))
