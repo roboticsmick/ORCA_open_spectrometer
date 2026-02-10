@@ -31,18 +31,54 @@ A one handed underwater spectrometer system using Ocean Optics ST-VIS spectromet
 
 ---
 
-## 1. Hardware Requirements
+## 1. Hardware
 
-* **Raspberry Pi Zero 2W** 
-* **PiTFT Plus Assembled 320x240 2.8" TFT + Resistive Touchscreen** 
+### 1.1 ORCA Open Spectrometer Hardware
+
+* **Raspberry Pi Zero 2W**
+* **PiTFT Plus Assembled 320x240 2.8" TFT + Resistive/Capacitive Touchscreen**
 * **Ocean Optics ST-VIS spectrometer**
-* **High-quality microSD card** (Samsung 128/256GB PRO Plus recommended)
-* **Adafruit MCP9808 High Accuracy I2C Temperature Sensor Breakout - STEMMA QT / Qwiic temperature sensor** 
+* **High-quality microSD card if flashing software (Samsung 128/256GB PRO Plus recommended)**
+* **Adafruit MCP9808 High Accuracy I2C Temperature Sensor Breakout**
+* **Hydrocean M10 Magnetic USB Penetrator**
 * **FEX Heat Sink with Fan FEX40-40-21/T710/M2**
 * **Blue Robotics leak sensor SOS Probes**
 * **ORCA Open Spectro Pi Hat**
-* **ORCA Magnetic Hal Effect Trigger Switches**
-* **ORCA USB-C magnetic charging penetrator**
+* **4 x ORCA Magnetic Hal Effect Trigger Switches**
+
+### 1.1 Disassembly
+
+**WARNING: You can easily damage the hardware or cables if you are not very careful opening the housing.**
+
+The device is very carefully assembled. Read all three guides from Blue Robotics on enclosure assembley before attempting to open the case as these outline how their parts work. Take note of where the ports and cables are located in the payload.
+
+* [Watertight Enclosure (WTE) User Guide](https://bluerobotics.com/learn/watertight-enclosure-wte-assembly-new/)
+
+To disassemble the device, both end caps need to carefully released, and all ports need to be unplugged in order to prevent damage.
+
+1. Completely unscrew the pressure relief valve. **Ensure no dust or sand gets on any of the parts or O-rings.**
+2. Remove both plastic locking cords on each end of the housing.
+3. Carefully open the penetrator bulkhead housing end of the tube (the side with all the cables). Open this just enough to access the battery bank plugs.
+4. Carefully reach into the housing to unplug both USB-C battery connections carefully.
+5. Carefully open the fibre optics bulkhead housing end of the tube just enough to access the spectrometer plug.
+6. Unplug the spectrometer USB-C port.
+7. Carefully reach into the housing and unplug the fan and temperature sensor from the Pi Hat (it helps if you have the housing rotated so the battery is parallel to the ground so it stays out of the way so you can access the plug).
+8. Unscrew the 2 x M3 bolts holding the battery USB cable plate.
+9. Unscrew the M3 bolts holding the Pi Hat cover. Carefully remove the plate being careful not to damage the leak sensor port.
+10. Carefully remove the Pi Hat being sure not to damage the P. Carefully remove the plate being careful not to damage the leak sensor power switch plug, and trigger plugs.
+11. Take note of the orientation of the USB-C plug on the Pi hat. Carefully remove the USB-C port of the Pi hat. **Note: Orientation of this USB-C port is critical. Plugging it in in reverse will stop break the power switch working.**.
+12. Unplug the leak sensor, triggers, and power switch ports. **Note: The triggers plugs are labelled and correspond to the labelled ports on the Pi hat PCB.**
+
+### 1.2 Waterproof Blue Robotics Housing and Pressure Testing
+
+The enclosures uses Blue Robotics enclosures. All O-rings, seals, and components need to be maintained and checked regularly.
+
+1. [Watertight Enclosure (WTE) User Guide](https://bluerobotics.com/learn/watertight-enclosure-wte-assembly-new/)
+
+The Vacuum Plug allows you to vacuum test enclosures ensuring a watertight seal.
+
+1. [Pressure Relief Valve Installation and Usage](https://bluerobotics.com/learn/pressure-relief-valve-installation-and-usage/)
+2. [Using the Vacuum Plug and Hand Pump](https://bluerobotics.com/learn/using-the-vacuum-test-plug/)
 
 ---
 
@@ -165,7 +201,8 @@ sudo apt install nmap
 #### Step 2: Find your laptop's IP address
 
 ```bash
-ip addr show | grep "inet "
+ip addr show | grep "inet "      # Search for local IP addresses
+ifconfig                         # Alternative search option
 ```
 
 Look for the IP address on your wireless interface (usually `wlan0` or `wlp...`):
@@ -181,7 +218,7 @@ In this example, your laptop's IP is `10.154.83.49`.
 Use nmap to scan all devices on the same subnet. Replace the IP with yours, keeping `.0/24` at the end:
 
 ```bash
-nmap -sn 10.154.83.0/24
+sudo nmap -sn 10.154.83.0/24
 ```
 
 This scans all addresses from `10.154.83.1` to `10.154.83.254`. Example output:
