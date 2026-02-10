@@ -63,11 +63,12 @@ To disassemble the device, both end caps need to carefully released, and all por
 5. Carefully open the fibre optics bulkhead housing end of the tube just enough to access the spectrometer plug.
 6. Unplug the spectrometer USB-C port.
 7. Carefully reach into the housing and unplug the fan and temperature sensor from the Pi Hat (it helps if you have the housing rotated so the battery is parallel to the ground so it stays out of the way so you can access the plug).
-8. Unscrew the 2 x M3 bolts holding the battery USB cable plate.
-9. Unscrew the M3 bolts holding the Pi Hat cover. Carefully remove the plate being careful not to damage the leak sensor port.
-10. Carefully remove the Pi Hat being sure not to damage the P. Carefully remove the plate being careful not to damage the leak sensor power switch plug, and trigger plugs.
-11. Take note of the orientation of the USB-C plug on the Pi hat. Carefully remove the USB-C port of the Pi hat. **Note: Orientation of this USB-C port is critical. Plugging it in in reverse will stop break the power switch working.**.
-12. Unplug the leak sensor, triggers, and power switch ports. **Note: The triggers plugs are labelled and correspond to the labelled ports on the Pi hat PCB.**
+8. You can now access the SD card if you need to add a WIFI account.
+9. Unscrew the 2 x M3 bolts holding the battery USB cable plate.
+10. Unscrew the M3 bolts holding the Pi Hat cover. Carefully remove the plate being careful not to damage the leak sensor plpugged into the Pi hat.
+11. Carefully remove the Pi Hat being sure not to damage the trigger plugs.
+12. Take note of the orientation of the USB-C plug on the Pi hat. Carefully remove the USB-C port of the Pi hat. **Note: Orientation of this USB-C port is critical. Plugging it in in reverse will stop break the power switch working.**.
+13. Unplug the leak sensor, triggers, and power switch ports. **Note: The triggers plugs are labelled and correspond to the labelled ports on the Pi hat PCB.**
 
 ### 1.2 Waterproof Blue Robotics Housing and Pressure Testing
 
