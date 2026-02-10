@@ -134,7 +134,7 @@ Configure your primary WiFi during the imaging process (section 2.2). You should
 
 ### 3.2 Adding Additional WiFi Networks
 
-This can only be done when the device is disassembled. See 1.1 Disassembly notes. I would recommend adding multiple WIFI accounts (e.g. your own hotspot, and any WIFI accounts you may want to access the device on). 
+This can be done remotely via SSH (Method B) if you are already connected to the Pi, or by editing the SD card directly if the device is disassembled (Method A). I would recommend adding multiple WiFi accounts (e.g. your own hotspot, and any WiFi accounts you may want to access the device on).
 
 #### Method A: Edit SD card directly (before boot)
 
