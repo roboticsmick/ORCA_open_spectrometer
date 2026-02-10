@@ -60,7 +60,7 @@ To disassemble the device, both end caps need to carefully released, and all por
 2. Remove both plastic locking cords on each end of the housing.
 3. Carefully open the penetrator bulkhead housing end of the tube (the side with all the cables). Open this just enough to access the battery bank plugs.
 4. Carefully reach into the housing to unplug both USB-C battery connections carefully.
-5. Carefully open the fibre optics bulkhead housing end of the tube just enough to access the spectrometer plug.
+5. Carefully open the fibre optics bulkhead housing end of the tube just enough to access the3.2 spectrometer plug.
 6. Unplug the spectrometer USB-C port.
 7. Carefully reach into the housing and unplug the fan and temperature sensor from the Pi Hat (it helps if you have the housing rotated so the battery is parallel to the ground so it stays out of the way so you can access the plug).
 8. **You can now access the SD card if you need to add additional WIFI accounts. See 3.2 Adding Additional WiFi Networks.**
