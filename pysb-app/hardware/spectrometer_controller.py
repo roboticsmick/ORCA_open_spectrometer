@@ -299,16 +299,11 @@ class SpectrometerController:
             return False
 
         try:
-            # List available devices
-            devices = sb.list_devices()
-            if not devices:
-                print("ERROR: No spectrometer devices found")
-                return False
-
-            # Open first device
-            self.spectrometer = Spectrometer.from_serial_number(
-                devices[0].serial_number
-            )
+            # Open first available spectrometer directly
+            # Note: from_first_available() handles device enumeration and opening
+            # in a single step, avoiding redundant list_devices() calls that
+            # stress the USB controller (see Jetson/Pi pyseabreeze patches)
+            self.spectrometer = Spectrometer.from_first_available()
             if not self.spectrometer or not hasattr(self.spectrometer, "_dev"):
                 print("ERROR: Failed to create Spectrometer instance")
                 return False

@@ -115,36 +115,25 @@ class SeaBreezeAPI(_SeaBreezeAPIProtocol):
         -------
         devices:
             connected Spectrometer instances
+
+        Note (Jetson Orin fix):
+            We intentionally do NOT open/close devices here to populate serial
+            numbers. On Jetson Orin with tegra-xusb, the probe-close-reopen
+            sequence stresses the USB controller and causes "interface 0 claimed"
+            conflicts and Errno 110 timeouts. Serial number is populated when
+            the actual node opens the device for real use.
         """
         # get all matching devices
         devices: list[_SeaBreezeDevice] = []
         for usb_dev in USBTransport.list_devices(**self._kwargs):
             # get the correct communication interface
             dev = _seabreeze_device_factory(usb_dev)
-            if not dev.is_open:
-                # opening the device will populate its serial number
-                try:
-                    dev.open()
-                except USBTransportDeviceInUse:
-                    # device used by another thread? -> exclude
-                    continue
-                except USBTransportError:
-                    # todo: investigate if there are ways to recover from here
-                    raise
-                else:
-                    dev.close()
+            # Skip opening device just to get serial number - causes USB issues on Jetson
             devices.append(dev)  # type: ignore
         for ipv4_dev in IPv4Transport.list_devices(**self._kwargs):
             # get the correct communication interface
             dev = _seabreeze_device_factory(ipv4_dev)
-            if not dev.is_open:
-                # opening the device will populate its serial number
-                try:
-                    dev.open()
-                except RuntimeError:
-                    raise
-                else:
-                    dev.close()
+            # Skip opening device just to get serial number
             devices.append(dev)  # type: ignore
         return devices
 

@@ -18,6 +18,7 @@ from collections.abc import Iterable
 from functools import partialmethod
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Dict, Tuple, Optional
 
 import usb.backend
 import usb.core
@@ -49,7 +50,7 @@ class USBTransportDeviceInUse(Exception):
     pass
 
 
-DeviceIdentity = tuple[int, int, int, int]
+DeviceIdentity = Tuple[int, int, int, int]
 
 
 # this can and should be opaque to pyseabreeze
@@ -70,10 +71,27 @@ class USBTransportHandle:
             pyusb_device.address,
         )
         self.pyusb_backend = get_name_from_pyusb_backend(pyusb_device.backend)
+        self._interface_claimed = False
 
     def close(self) -> None:
+        """Close the USB device handle properly.
+
+        NOTE: We intentionally do NOT reset the device here. Reset is only done
+        once at the start of open_device() to clear stale state. Resetting on
+        close causes repeated USB resets when the transport is accessed multiple
+        times (the original bug on Jetson Orin).
+        """
         try:
-            self.pyusb_device.reset()
+            # Release interface first if claimed
+            if self._interface_claimed:
+                try:
+                    usb.util.release_interface(self.pyusb_device, 0)
+                    self._interface_claimed = False
+                    logging.debug("Released USB interface 0")
+                except usb.core.USBError:
+                    pass
+            # Dispose resources - this frees the libusb handle without resetting
+            usb.util.dispose_resources(self.pyusb_device)
         except usb.core.USBError:
             logging.debug(
                 "USBError while calling USBTransportHandle.close on {:04x}:{:04x}".format(
@@ -81,6 +99,9 @@ class USBTransportHandle:
                 ),
                 exc_info=True,
             )
+        except Exception:
+            # Catch any other errors during cleanup
+            pass
 
     def __del__(self) -> None:
         if self.pyusb_backend == "libusb1":
@@ -105,7 +126,7 @@ class USBTransport(PySeaBreezeTransport[USBTransportHandle]):
         "usb_endpoint_map",
         "usb_protocol",
     )
-    vendor_product_ids: dict[tuple[int, int], str] = {}
+    vendor_product_ids: Dict[Tuple[int, int], str] = {}
 
     # add logging
     _log = logging.getLogger(__name__)
@@ -143,31 +164,151 @@ class USBTransport(PySeaBreezeTransport[USBTransportHandle]):
         self._opened: bool | None = None
         self._protocol: PySeaBreezeProtocol | None = None
 
+    def _clear_stale_claims_sysfs(self, pyusb_device: usb.core.Device) -> bool:
+        """Clear stale USB claims using sysfs unbind/rebind (Jetson Orin safe).
+
+        NOTE: This method is NOT called during normal operation. It is kept here
+        for manual recovery scenarios where a stale claim from a crashed process
+        is blocking device access. Calling this during normal open causes the
+        device to physically disconnect and re-enumerate, leading to "Errno 19:
+        No such device" errors.
+
+        On Jetson Orin with tegra-xusb, USB reset causes device disconnection.
+        This method uses kernel sysfs to unbind and rebind the device, which
+        clears all userspace claims without the problematic USB reset.
+
+        Returns True if successful, False otherwise.
+        """
+        import os
+        import time
+        import glob
+
+        try:
+            bus = pyusb_device.bus
+            address = pyusb_device.address
+
+            # Find the sysfs path for this device
+            # USB devices are at /sys/bus/usb/devices/X-Y.Z where X is bus
+            sysfs_pattern = f"/sys/bus/usb/devices/{bus}-*"
+
+            device_path = None
+            for path in glob.glob(sysfs_pattern):
+                # Check if this path matches our device by reading devnum
+                devnum_path = os.path.join(path, "devnum")
+                if os.path.exists(devnum_path):
+                    try:
+                        with open(devnum_path, 'r') as f:
+                            devnum = int(f.read().strip())
+                            if devnum == address:
+                                device_path = os.path.basename(path)
+                                break
+                    except (IOError, ValueError):
+                        continue
+
+            if not device_path:
+                self._log.debug(f"Could not find sysfs path for bus={bus} addr={address}")
+                return False
+
+            unbind_path = "/sys/bus/usb/drivers/usb/unbind"
+            bind_path = "/sys/bus/usb/drivers/usb/bind"
+
+            # Check if we have write access
+            if not os.access(unbind_path, os.W_OK):
+                self._log.debug("No write access to sysfs USB unbind (need root)")
+                return False
+
+            self._log.info(f"Clearing stale claims via sysfs unbind/rebind: {device_path}")
+
+            # Unbind the device
+            try:
+                with open(unbind_path, 'w') as f:
+                    f.write(device_path)
+                self._log.debug(f"Unbound {device_path}")
+            except IOError as e:
+                self._log.debug(f"Unbind failed (may already be unbound): {e}")
+
+            # Wait for kernel to process
+            time.sleep(0.5)
+
+            # Rebind the device
+            try:
+                with open(bind_path, 'w') as f:
+                    f.write(device_path)
+                self._log.debug(f"Rebound {device_path}")
+            except IOError as e:
+                self._log.warning(f"Rebind failed: {e}")
+                return False
+
+            # Wait for device to re-enumerate
+            time.sleep(1.0)
+
+            self._log.info("Sysfs unbind/rebind complete")
+            return True
+
+        except Exception as e:
+            self._log.debug(f"Sysfs claim clearing failed: {e}")
+            return False
+
     def open_device(self, device: USBTransportHandle) -> None:
         if not isinstance(device, USBTransportHandle):
             raise TypeError("device needs to be a USBTransportHandle")
-        # device.reset()
         self._device = device
         pyusb_device = self._device.pyusb_device
+        import time
+
+        # === STEP 1: Clear internal pyusb/libusb state ===
+        # This frees any stale handles without bouncing the USB bus
+        try:
+            usb.util.dispose_resources(pyusb_device)
+        except Exception:
+            pass
+
+        # === STEP 2: Detach kernel driver (required for user-space access) ===
         try:
             if pyusb_device.is_kernel_driver_active(0):
+                self._log.debug("Detaching kernel driver from interface 0")
                 pyusb_device.detach_kernel_driver(0)
         except NotImplementedError:
             pass  # unavailable on some systems/backends
-        try:
-            pyusb_device.set_configuration()
         except usb.core.USBError as err:
-            if err.errno == 16:
-                # TODO: warn as in cseabreeze
-                self._opened = True
-                raise USBTransportDeviceInUse(
-                    "device probably used by another thread/process"
-                )
-            raise USBTransportError.from_usberror(err)
-        else:
-            self._opened = True
+            self._log.debug(f"Kernel driver detach failed (may be OK): {err}")
 
-        # configure the default_read_size according to pyusb info
+        # === STEP 3: Set configuration (only if necessary) ===
+        # On Jetson Orin, calling set_configuration while interface is already
+        # claimed causes the "interface 0 claimed" dmesg error and USB hangs.
+        # We only call it if the device isn't already configured to config 1.
+        try:
+            # First, check if configuration is already set to 1
+            # Most Linux systems do this automatically on plug
+            cfg = pyusb_device.get_active_configuration()
+            if cfg.bConfigurationValue != 1:
+                self._log.debug("Device not configured to 1, setting configuration...")
+                pyusb_device.set_configuration(1)
+            else:
+                self._log.debug("Device already configured to config 1, skipping set_configuration")
+        except usb.core.USBError:
+            # If get_active_configuration fails, the device is "unconfigured"
+            try:
+                self._log.debug("Device unconfigured, setting configuration 1...")
+                pyusb_device.set_configuration(1)
+            except usb.core.USBError as e:
+                self._log.debug(f"Allowing set_config failure: {e}")
+
+        # === STEP 4: Claim interface ===
+        try:
+            usb.util.claim_interface(pyusb_device, 0)
+            self._device._interface_claimed = True
+            self._log.debug("Successfully claimed USB interface 0")
+        except usb.core.USBError as claim_err:
+            self._log.error(f"Claim failed: {claim_err}")
+            raise USBTransportDeviceInUse(
+                f"Interface 0 is locked: {claim_err}. "
+                "Try: 1) Kill any other python/seabreeze processes, 2) Unplug and replug the device"
+            )
+
+        self._opened = True
+
+        # Configure the default_read_size according to pyusb info
         ep_max_packet_size = {}
         for intf in pyusb_device.get_active_configuration():
             for ep in intf.endpoints():
@@ -184,6 +325,22 @@ class USBTransport(PySeaBreezeTransport[USBTransportHandle]):
             cur_size = self._default_read_size[mode_name]
             self._default_read_size[mode_name] = min(cur_size, max_size)
 
+        # === STEP 5: Set generous default timeout ===
+        # The default pyusb timeout (1000ms) is too short for spectrometers with
+        # long integration times. Set a 10 second default - can be overridden later.
+        try:
+            pyusb_device.default_timeout = 10000  # 10 seconds
+            self._log.debug("Set default USB timeout to 10000 ms")
+        except Exception as err:
+            self._log.debug(f"Could not set default timeout: {err}")
+
+        # === STEP 6: Stabilization delay (critical for Ocean ST) ===
+        # The Ocean ST needs time to wake up its OBP2 parser after configuration.
+        # Without this delay, the first command (typically serial number query)
+        # times out with Errno 110.
+        time.sleep(0.5)
+        self._log.debug("Device stabilization delay complete (500ms)")
+
         # This will initialize the communication protocol
         if self._opened:
             self._protocol = self._protocol_cls(self)
@@ -193,6 +350,15 @@ class USBTransport(PySeaBreezeTransport[USBTransportHandle]):
         return self._opened or False
 
     def close_device(self) -> None:
+        # Release interface before closing
+        if self._device is not None and hasattr(self._device, '_interface_claimed'):
+            if self._device._interface_claimed:
+                try:
+                    usb.util.release_interface(self._device.pyusb_device, 0)
+                    self._device._interface_claimed = False
+                except usb.core.USBError:
+                    pass
+
         if self._device is not None:
             self._device.close()
             self._device = None
@@ -233,6 +399,25 @@ class USBTransport(PySeaBreezeTransport[USBTransportHandle]):
         if not self._device:
             raise RuntimeError("no protocol instance available")
         return self._device.pyusb_device.default_timeout  # type: ignore
+
+    @default_timeout_ms.setter
+    def default_timeout_ms(self, value: int) -> None:
+        """Set the default USB timeout in milliseconds."""
+        if not self._device:
+            raise RuntimeError("no device available")
+        self._device.pyusb_device.default_timeout = value
+        self._log.debug(f"Set USB default_timeout to {value} ms")
+
+    @property
+    def _usb_device(self) -> usb.core.Device | None:
+        """Provide access to underlying pyusb device for timeout configuration.
+
+        This property exists to allow external code (like spectrometer_node.py)
+        to configure USB timeouts for long integration times.
+        """
+        if self._device:
+            return self._device.pyusb_device
+        return None
 
     @property
     def protocol(self) -> PySeaBreezeProtocol:
@@ -312,16 +497,9 @@ class USBTransport(PySeaBreezeTransport[USBTransportHandle]):
 
     @classmethod
     def initialize(cls, **_kwargs: Any) -> None:
-        for device in cls.list_devices(**_kwargs):
-            try:
-                device.pyusb_device.reset()
-                # usb.util.dispose_resources(device)  <- already done by device.reset()
-            except Exception as err:
-                cls._log.debug(
-                    "initialize failed: {}('{}')".format(
-                        err.__class__.__name__, getattr(err, "message", "no message")
-                    )
-                )
+        # NOTE: Original code called device.pyusb_device.reset() here, but this
+        # causes constant USB resets on Jetson Orin. Skip reset during initialization.
+        pass
 
     @classmethod
     def shutdown(cls, **_kwargs: Any) -> None:
@@ -337,7 +515,7 @@ class USBTransport(PySeaBreezeTransport[USBTransportHandle]):
                 )
 
 
-_pyusb_backend_instances: dict[str, usb.backend.IBackend] = {}
+_pyusb_backend_instances: Dict[str, usb.backend.IBackend] = {}
 
 
 def get_pyusb_backend_from_name(name: str) -> usb.backend.IBackend:
@@ -426,7 +604,7 @@ class IPv4Transport(PySeaBreezeTransport[IPv4TransportHandle]):
 
     _required_init_kwargs = ("ipv4_protocol",)
 
-    devices_ip_port: dict[tuple[str, int], str] = {}
+    devices_ip_port: Dict[Tuple[str, int], str] = {}
 
     # add logging
     _log = logging.getLogger(__name__)
