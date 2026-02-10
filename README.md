@@ -63,7 +63,7 @@ To disassemble the device, both end caps need to carefully released, and all por
 5. Carefully open the fibre optics bulkhead housing end of the tube just enough to access the spectrometer plug.
 6. Unplug the spectrometer USB-C port.
 7. Carefully reach into the housing and unplug the fan and temperature sensor from the Pi Hat (it helps if you have the housing rotated so the battery is parallel to the ground so it stays out of the way so you can access the plug).
-8. You can now access the SD card if you need to add a WIFI account.
+8. **You can now access the SD card if you need to add additional WIFI accounts. See 3.2 Adding Additional WiFi Networks.**
 9. Unscrew the 2 x M3 bolts holding the battery USB cable plate.
 10. Unscrew the M3 bolts holding the Pi Hat cover. Carefully remove the plate being careful not to damage the leak sensor plpugged into the Pi hat.
 11. Carefully remove the Pi Hat being sure not to damage the trigger plugs.
@@ -84,6 +84,8 @@ The Vacuum Plug allows you to vacuum test enclosures ensuring a watertight seal.
 ---
 
 ## 2. Installing Ubuntu on the Raspberry Pi
+
+These steps are required to create a new ORCA Open Spectrometer SD card to run the app on a Raspberry Pi Zero 2W. **Please note: These steps are not required if you have a working device.**
 
 ### 2.1 Download Raspberry Pi Imager
 
@@ -131,6 +133,8 @@ sudo apt install rpi-imager
 Configure your primary WiFi during the imaging process (section 2.2). You should also add your mobile hotspot for easy field access to the data of configuration settings, along with any other WiFi networks you plan on connecting to at this stage.
 
 ### 3.2 Adding Additional WiFi Networks
+
+This can only be done when the device is disassembled. See 1.1 Disassembly notes. I would recommend adding multiple WIFI accounts (e.g. your own hotspot, and any WIFI accounts you may want to access the device on). 
 
 #### Method A: Edit SD card directly (before boot)
 
