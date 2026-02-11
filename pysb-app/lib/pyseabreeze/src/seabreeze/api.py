@@ -130,11 +130,16 @@ class SeaBreezeAPI(_SeaBreezeAPIProtocol):
             dev = _seabreeze_device_factory(usb_dev)
             # Skip opening device just to get serial number - causes USB issues on Jetson
             devices.append(dev)  # type: ignore
-        for ipv4_dev in IPv4Transport.list_devices(**self._kwargs):
-            # get the correct communication interface
-            dev = _seabreeze_device_factory(ipv4_dev)
-            # Skip opening device just to get serial number
-            devices.append(dev)  # type: ignore
+        try:
+            for ipv4_dev in IPv4Transport.list_devices(**self._kwargs):
+                # get the correct communication interface
+                dev = _seabreeze_device_factory(ipv4_dev)
+                # Skip opening device just to get serial number
+                devices.append(dev)  # type: ignore
+        except OSError:
+            # IPv4 discovery fails when no network interface is available
+            # (e.g. booting without WiFi). USB devices still work fine.
+            pass
         return devices
 
     # note: to be fully consistent with cseabreeze this shouldn't be a staticmethod

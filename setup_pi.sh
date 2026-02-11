@@ -207,15 +207,18 @@ optimize_boot_performance() {
         fi
     done
 
-    # Disable NetworkManager-wait-online (WiFi still connects, just doesn't block boot)
-    info "Disabling network-wait service..."
-    if systemctl is-enabled NetworkManager-wait-online.service &>/dev/null 2>&1; then
-        sudo systemctl disable NetworkManager-wait-online.service 2>/dev/null || true
-        sudo systemctl mask NetworkManager-wait-online.service 2>/dev/null || true
-        info "  Disabled: NetworkManager-wait-online.service"
-    else
-        info "  Already disabled: NetworkManager-wait-online.service"
-    fi
+    # Disable network-wait-online services (WiFi still connects, just doesn't block boot)
+    # Ubuntu Server with netplan uses systemd-networkd, not NetworkManager
+    info "Disabling network-wait services..."
+    for svc in NetworkManager-wait-online.service systemd-networkd-wait-online.service; do
+        if systemctl is-enabled "$svc" &>/dev/null 2>&1; then
+            sudo systemctl disable "$svc" 2>/dev/null || true
+            sudo systemctl mask "$svc" 2>/dev/null || true
+            info "  Disabled: $svc"
+        else
+            info "  Already disabled or not present: $svc"
+        fi
+    done
 
     info "Boot optimization complete. Expected boot time: ~20 seconds (down from 2+ minutes)"
 }

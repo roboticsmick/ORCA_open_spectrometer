@@ -144,13 +144,36 @@ This can be done remotely via SSH (Method B) if you are already connected to the
 
 #### Method B: Edit via SSH (after boot)
 
+Use this method when you are already connected to the Pi over SSH (e.g. via your own hotspot) and want to add another WiFi network without disassembling the device.
+
+**Step 1: SSH into the Pi**
+
 ```bash
-# See section 3.3 if you don't know how to find your Raspberry Pi IP_ADDRESS
 ssh pi@<IP_ADDRESS>
-sudo vim /etc/netplan/50-cloud-init.yaml
 ```
 
-**Example configuration:**
+> Don't know the IP address? See section 3.3.
+
+**Step 2: Open the WiFi configuration file**
+
+```bash
+sudo nano /etc/netplan/50-cloud-init.yaml
+```
+
+**Step 3: Add the new WiFi network**
+
+Use the arrow keys to scroll down to the `access-points:` section. You will see your existing WiFi networks listed. Add the new network directly below the last one, keeping the exact same indentation (spaces, not tabs).
+
+Add these two lines, replacing the name and password with the actual values:
+
+```yaml
+                "New_WiFi_Name":
+                    password: "wifi_password"
+```
+
+> **Important:** The indentation must be exactly **16 spaces** before the WiFi name and **20 spaces** before `password`. Use spaces only, never tabs. Incorrect indentation will prevent WiFi from connecting.
+
+**Example: What the full file should look like**
 
 ```yaml
 network:
@@ -159,23 +182,29 @@ network:
         renderer: networkd
         wlan0:
             access-points:
-                "Your_Hotspot_Name":
+                "Your_Hotspot":
                     password: "hotspot_password"
-                "Home_WiFi":
-                    password: "home_password"
-                "Office_WiFi":
-                    password: "office_password"
+                "Friends_Hotspot":
+                    password: "friends_password"
+                "Lab_WiFi":
+                    password: "lab_password"
             dhcp4: true
             optional: true
 ```
 
-> **Important:** YAML requires consistent indentation (use spaces, not tabs).
+**Step 4: Save and exit nano**
 
-**Apply changes:**
+1. Press `Ctrl + O` (the letter O) to save
+2. Press `Enter` to confirm the filename
+3. Press `Ctrl + X` to exit
+
+**Step 5: Apply the changes**
 
 ```bash
 sudo netplan apply
 ```
+
+> Your SSH connection may briefly drop while the network reconfigures. Wait a few seconds and reconnect if needed. The Pi will automatically connect to whichever configured network it finds.
 
 ### 3.3 Finding the Pi's IP Address
 
@@ -344,6 +373,11 @@ The app uses 4 buttons:
 | **B (BACK)** | Cancel / Go back | Return to menu |
 
 ### 6.2 Integration Time
+pi@ada:~/pysb-app/hardware$ sudo systemctl disable systemd-networkd-wait-online.service
+[sudo] password for pi: 
+Removed /etc/systemd/system/network-online.target.wants/systemd-networkd-wait-online.service.
+pi@ada:~/pysb-app/hardware$ sudo systemctl mask systemd-networkd-wait-online.service
+Created symlink /etc/systemd/system/systemd-networkd-wait-online.service → /dev/null.
 
 Controls how long the sensor collects light per measurement.
 
@@ -367,7 +401,12 @@ Controls how long the sensor collects light per measurement.
 | Mode | Description |
 |------|-------------|
 | **RAW** | Direct sensor readings as ADC counts (0-16383) |
-| **REFLECTANCE** | Calibrated reflectance ratio (requires calibration) |
+| **REFLECTANCE** |pi@ada:~/pysb-app/hardware$ sudo systemctl disable systemd-networkd-wait-online.service
+[sudo] password for pi: 
+Removed /etc/systemd/system/network-online.target.wants/systemd-networkd-wait-online.service.
+pi@ada:~/pysb-app/hardware$ sudo systemctl mask systemd-networkd-wait-online.service
+Created symlink /etc/systemd/system/systemd-networkd-wait-online.service → /dev/null.
+ Calibrated reflectance ratio (requires calibration) |
 
 #### RAW Mode
 

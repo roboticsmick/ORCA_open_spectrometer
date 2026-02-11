@@ -240,12 +240,20 @@ class SpectrometerController:
         finally:
             self._thread = None
 
+    ## @var INIT_RETRY_COUNT
+    # @brief Number of retries for spectrometer initialization during startup.
+    INIT_RETRY_COUNT = 5
+
+    ## @var INIT_RETRY_DELAY_S
+    # @brief Delay between initialization retries in seconds.
+    INIT_RETRY_DELAY_S = 2.0
+
     def _run_loop(self):
         """
         Main thread loop.
 
         This loop:
-        1. Initializes the spectrometer hardware
+        1. Initializes the spectrometer hardware (with retries for boot timing)
         2. Processes commands from the request queue
         3. Captures spectral data when session is active
         4. Sends results to the result queue
@@ -253,9 +261,26 @@ class SpectrometerController:
         """
         print("SpectrometerController: Thread loop started")
 
-        # Initialize hardware
-        if not self._initialize_spectrometer():
-            print("ERROR: Failed to initialize spectrometer. Thread exiting.")
+        # Initialize hardware with retries for boot timing
+        initialized = False
+        for attempt in range(self.INIT_RETRY_COUNT):
+            if self.shutdown_flag.is_set():
+                return
+
+            if attempt > 0:
+                print(f"SpectrometerController: Retry {attempt + 1}/"
+                      f"{self.INIT_RETRY_COUNT} in {self.INIT_RETRY_DELAY_S}s...")
+                self.shutdown_flag.wait(timeout=self.INIT_RETRY_DELAY_S)
+                if self.shutdown_flag.is_set():
+                    return
+
+            if self._initialize_spectrometer():
+                initialized = True
+                break
+
+        if not initialized:
+            print("ERROR: Failed to initialize spectrometer after "
+                  f"{self.INIT_RETRY_COUNT} attempts. Thread exiting.")
             return
 
         try:
