@@ -76,8 +76,7 @@ To disassemble the device, both end caps need to carefully released, and all por
 The enclosures uses Blue Robotics enclosures. All O-rings, seals, and components need to be maintained and checked regularly.
 
 1. [Watertight Enclosure (WTE) User Guide](https://bluerobotics.com/learn/watertight-enclosure-wte-assembly-new/)
-2. Before use in saltware, apply Tef-Gel to all stainless steel bolts on the housing to prevent galvanic corroision as noted in the Blue Robotics guide.
-3. The springs on the triggers need to use EPDM O-rings (Ethylene Propylene Diene Monomer). Blue Robotics Buna-N o-rings will work temporarily, but will not last very long in saltwater environments. Ensure two o-ring are installed on each trigger. These should be examined before each dive.
+
 
 The Vacuum Plug allows you to vacuum test enclosures ensuring a watertight seal.
 
@@ -87,13 +86,21 @@ The Vacuum Plug allows you to vacuum test enclosures ensuring a watertight seal.
 
 ### Maintenance
 
-1. All external bolts are stainless steel 316. Where stainless steel bolts bolt into aluminium housings, 
+1. All external bolts are stainless steel 316. Where stainless steel bolts coming into contact with aluminium housings, Tef-Gel should be applied to prevent galvanic corroision as noted in the Blue Robotics enclosures guide. This should be applied if using in saltwater (irrespective of dive duration). This only need to be applied once.
+2. The springs on the triggers need to use EPDM O-rings (Ethylene Propylene Diene Monomer). Blue Robotics Buna-N o-rings will work temporarily, but will not last very long in saltwater environments. Ensure two o-ring are installed on each trigger. These should be examined before each dive.
+3. Ensure all seals are clean and free from dust and contaminents. Apply Molykote 111 before assembly.
+4. Pressure test after reassembly.
+5. Ensure the device is left in clean freshwater after each use to prevent salt crystalisation. Saltwater that dries in 3D printed parts can crystalise, and cause cracking. All parts are printed with ASA or ABS with 100% infill. Sealing 3D-printed components with dichtol sealant can prevent saltware damage to 3D prints.
+6. Ensure the spectometer is not left to sit in the sun. UV light degrades 3D prints over time.
+7. All 3D printed parts can be replaced with machined aluminium components to increase lifespan. Ensure all aluminium parts are annodised.
 
 ---
 
-## 2. Installing Ubuntu on the Raspberry Pi
+## 2. Installing Ubuntu on the Raspberry Pi (Steps 2-4)
 
-These steps are required to create a new ORCA Open Spectrometer SD card to run the app on a Raspberry Pi Zero 2W. **Please note: These steps are not required if you have a working device.**
+These steps are required to create a new ORCA Open Spectrometer SD card to run the app on a Raspberry Pi Zero 2W. **Please note: These steps are not required if you have a working device. For instructions on using the app, start from step 5.**
+
+These instructions are a general guide for setup. I have attempted to document the majority of installation steps and fixes I did to make the system work, but additional steps may be required.
 
 ### 2.1 Download Raspberry Pi Imager
 
