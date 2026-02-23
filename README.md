@@ -44,7 +44,8 @@ A one handed underwater spectrometer system using Ocean Optics ST-VIS spectromet
 * **FEX Heat Sink with Fan FEX40-40-21/T710/M2**
 * **Blue Robotics leak sensor SOS Probes**
 * **ORCA Open Spectro Pi Hat**
-* **4 x ORCA Magnetic Hal Effect Trigger Switches**
+* **4 x ORCA Magnetic Hall Effect Trigger Switches**
+* **8 x EPDM O-rings Metric: ~10.82mm ID X 1.78mm CS (plus spares)**
 
 ### 1.1 Disassembly
 
@@ -75,11 +76,18 @@ To disassemble the device, both end caps need to carefully released, and all por
 The enclosures uses Blue Robotics enclosures. All O-rings, seals, and components need to be maintained and checked regularly.
 
 1. [Watertight Enclosure (WTE) User Guide](https://bluerobotics.com/learn/watertight-enclosure-wte-assembly-new/)
+2. Before use in saltware, apply Tef-Gel to all stainless steel bolts on the housing to prevent galvanic corroision as noted in the Blue Robotics guide.
+3. The springs on the triggers need to use EPDM O-rings (Ethylene Propylene Diene Monomer). Blue Robotics Buna-N o-rings will work temporarily, but will not last very long in saltwater environments. Ensure two o-ring are installed on each trigger. These should be examined before each dive.
 
 The Vacuum Plug allows you to vacuum test enclosures ensuring a watertight seal.
 
 1. [Pressure Relief Valve Installation and Usage](https://bluerobotics.com/learn/pressure-relief-valve-installation-and-usage/)
 2. [Using the Vacuum Plug and Hand Pump](https://bluerobotics.com/learn/using-the-vacuum-test-plug/)
+
+
+### Maintenance
+
+1. All external bolts are stainless steel 316. Where stainless steel bolts bolt into aluminium housings, 
 
 ---
 
